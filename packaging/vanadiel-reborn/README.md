@@ -78,3 +78,21 @@ Preserve original gameplay and animations.
 Keep graphics enhancements optional and scalable through presets.
 Ray tracing and animated vegetation are outside scope.
 Keep Rust, Bevy, and wgpu as the foundation.
+
+## November server compatibility
+
+The recorded server revision is `7a91059f856933fcec58f2287e22c6ef6148935c`.
+That revision requires JSON loader version `3.0.x` and TLS on both lobby connections.
+Select Current LSB and enter loader version `3.0.0` in the server profile.
+The client reuses the authentication certificate pin for both encrypted connections.
+A TLS failure never causes a plaintext retry.
+The selected loader version and authentication flavor persist through reconnect.
+Older loader profiles retain their original lobby transport.
+
+That server revision defaults to client stamp `30261102_0`.
+Confirm the active setting with the inspection tool.
+Use matching game files; keep server version checks enabled.
+The handoff layout and Huffman resource bytes match the older build input.
+The build input remains pinned; the running server remains unchanged.
+Encrypted loopback tests cover character selection, handoff, and certificate mismatch rejection.
+Live server compatibility and GPU presentation still require a local test.
