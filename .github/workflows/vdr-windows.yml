@@ -1,0 +1,64 @@
+name: VDR Windows baseline
+
+on:
+  push:
+    branches: ['vdr/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vdr-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      CXXFLAGS: ''
+      RUSTFLAGS: '-C target-feature=+crt-static'
+      CARGO_PROFILE_DEV_CODEGEN_BACKEND: llvm
+      CARGO_PROFILE_TEST_CODEGEN_BACKEND: llvm
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up pinned Rust
+        shell: pwsh
+        run: |
+          $pin = (Select-String -Path rust-toolchain.toml -Pattern '^channel = "([^"]+)"').Matches.Groups[1].Value
+          rustup toolchain install $pin --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "RUSTUP_TOOLCHAIN=$pin" >> $env:GITHUB_ENV
+      - name: Set up build inputs
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git config core.longpaths true
+          git submodule update --init --depth 1 vendor/server vendor/POLUtils
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: vdr-windows-baseline
+          cache-on-failure: 'true'
+      - name: Test local inspection tool
+        shell: pwsh
+        run: python -m unittest discover -s packaging/vanadiel-reborn -p 'test_*.py' -v
+      - name: Test protocol and session libraries
+        shell: pwsh
+        run: |
+          cargo test --locked --release -p ffxi-proto -p ffxi-vocab -p kuluu-session --lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and check Windows package
+        shell: pwsh
+        run: ./packaging/vanadiel-reborn/build-windows.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vanadiel-reborn-windows-x64-${{ github.sha }}
+          path: dist/vanadiel-reborn-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
