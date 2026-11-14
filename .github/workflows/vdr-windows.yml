@@ -56,7 +56,7 @@ jobs:
       - name: Test party-frame logic
         shell: pwsh
         run: |
-          cargo test --locked --release -p kuluu-render --lib hud::party_frame::tests
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib hud::party_frame::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build party-frame capture
         shell: pwsh
