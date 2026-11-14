@@ -1016,7 +1016,7 @@ fn spawn_row_l1(
                                 max_width: Val::Percent(100.0),
                                 ..default()
                             },
-                            TextLayout::new_with_linebreak(bevy::text::LineBreak::AnyCharacter),
+                            TextLayout::linebreak(bevy::text::LineBreak::AnyCharacter),
                             Text::new(name_label),
                             style::text_font(NAME_PX * s.scale.max(0.75)),
                             TextColor(name_color),
