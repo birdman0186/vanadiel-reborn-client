@@ -110,3 +110,8 @@ A capture failure leaves visual verification incomplete, even if the client buil
 Inspect all three PNG files before accepting the visual result.
 The package still needs a live check on the player's Windows PC.
 Keep the earlier package as the rollback copy.
+
+The off-screen fixture selects its UI camera explicitly and rejects uniform captures.
+Its separate build disables optimization to reduce validation build time.
+The playable client keeps its optimized release build.
+Fixture captures establish layout evidence only; they do not establish game performance.
