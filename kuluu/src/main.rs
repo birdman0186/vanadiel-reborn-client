@@ -300,7 +300,8 @@ async fn run_command_async(args: Args, auth: auth_client::AuthClient) -> Result<
             auth.ensure_account(&user, &password).await.ok();
             let session = auth.login(&user, &password).await.context("login")?;
             let lobby =
-                lobby_client::LobbyClient::new(args.server.clone(), args.data_port, args.view_port);
+                lobby_client::LobbyClient::new(args.server.clone(), args.data_port, args.view_port)
+                    .with_auth_client(&auth);
             let spec = lobby_client::CharCreateSpec {
                 name: name.clone(),
                 race,
@@ -331,7 +332,8 @@ async fn run_command_async(args: Args, auth: auth_client::AuthClient) -> Result<
             }
             let dat_root = resolve_dat_root(args.require_dat)?;
             let lobby =
-                lobby_client::LobbyClient::new(args.server.clone(), args.data_port, args.view_port);
+                lobby_client::LobbyClient::new(args.server.clone(), args.data_port, args.view_port)
+                    .with_auth_client(&auth);
 
             let (user, password, char_id, _char_name, initial_state) =
                 match (user, password, char_name) {
@@ -409,6 +411,7 @@ async fn run_command_async(args: Args, auth: auth_client::AuthClient) -> Result<
                 initial_state: Some(initial_state),
                 playonline_session,
 
+                auth_options: Some(auth.connection_options()),
                 user_driven_events: false,
                 dat_root: dat_root.clone(),
             };
@@ -550,7 +553,8 @@ fn run_gui_main_thread(
         char_name,
     };
 
-    let lobby = lobby_client::LobbyClient::new(server.clone(), data_port, view_port);
+    let lobby = lobby_client::LobbyClient::new(server.clone(), data_port, view_port)
+        .with_auth_client(&auth);
 
     let dat_root = resolve_dat_root(args_require_dat)?;
 
