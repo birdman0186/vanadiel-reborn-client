@@ -34,7 +34,10 @@ use crate::snapshot::SceneState;
 const BASE_MULT: f32 = 0.8;
 
 // L1 — Party A "compact vertical" (display.lua layout 1).
-const L1_HP_BASE_W: f32 = 150.0;
+const L1_HP_WIDTH: f32 = 220.0;
+const L1_NAME_HEIGHT: f32 = 18.0;
+const L1_ROW_PADDING: f32 = 2.0;
+const L1_ROW_BORDER: f32 = 1.0;
 const L1_MP_BASE_W: f32 = 100.0;
 const L1_BAR_H: f32 = 20.0;
 const L1_ICON_SIZE: f32 = 28.0;
@@ -924,18 +927,6 @@ fn spawn_member_row(
     }
 }
 
-/// L1 compact vertical (Party A): [icon slot | HP bar / MP bar], with the
-/// name line overlaid on the HP bar's top edge and distance right-aligned.
-/// Retail+ gate: with the job column off the row is just the bars, no icon
-/// slot, no gap (retail's party frame has no jobs). The row root is relative
-/// so the absolute name line anchors to it; uniform padding on every row, the
-/// selection box toggles colors, not geometry. The job icon slot is
-/// placeholder text until icon textures land, with no background box: the
-/// filled rectangle read as a leftover artifact. The bars column puts HP on
-/// top, MP right-aligned under it (display.lua L1); [TP value] [MP bar] share
-/// one line under the HP bar's right edge, TP a bare number (gold at 1000).
-/// The name line straddles the HP bar's top edge: [leader dot(s)] [name]
-/// ......... [distance].
 fn spawn_row_l1(
     parent: &mut ChildSpawnerCommands,
     m: &kuluu_snapshot::PartyMember,
@@ -949,12 +940,12 @@ fn spawn_row_l1(
     job_display: bool,
 ) {
     let sc = s.scale;
-    let hp_w = L1_HP_BASE_W * BASE_MULT * L1_HP_W_MULT * sc;
+    let hp_w = L1_HP_WIDTH * sc;
     let mp_w = L1_MP_BASE_W * BASE_MULT * L1_HP_W_MULT * L1_MP_EXTRA_W_MULT * sc;
     let bar_h = L1_BAR_H * sc;
     let icon_size = if job_display { L1_ICON_SIZE * sc } else { 0.0 };
     let inset = if job_display { L1_BAR_INSET * sc } else { 0.0 };
-    let entry_h = bar_h + 1.0 + bar_h;
+    let entry_h = L1_NAME_HEIGHT * sc + bar_h + 1.0 + bar_h;
 
     let mut row = parent.spawn((
         Node {
@@ -962,10 +953,10 @@ fn spawn_row_l1(
             flex_direction: FlexDirection::Row,
             align_items: AlignItems::Center,
             column_gap: Val::Px(inset),
-            width: Val::Px(icon_size + inset + hp_w),
-            height: Val::Px(entry_h),
-            padding: UiRect::all(Val::Px(2.0)),
-            border: UiRect::all(Val::Px(1.0)),
+            width: Val::Px(icon_size + inset + hp_w + 2.0 * (L1_ROW_PADDING + L1_ROW_BORDER)),
+            min_height: Val::Px(entry_h),
+            padding: UiRect::all(Val::Px(L1_ROW_PADDING)),
+            border: UiRect::all(Val::Px(L1_ROW_BORDER)),
             ..default()
         },
         PartyRowTarget(m.id),
@@ -998,10 +989,58 @@ fn spawn_row_l1(
 
         row.spawn((Node {
             flex_direction: FlexDirection::Column,
+            flex_shrink: 0.0,
             row_gap: Val::Px(1.0),
             ..default()
         },))
             .with_children(|bars| {
+                bars.spawn((Node {
+                    width: Val::Px(hp_w),
+                    min_height: Val::Px(L1_NAME_HEIGHT * sc),
+                    flex_wrap: FlexWrap::Wrap,
+                    flex_shrink: 0.0,
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(4.0),
+                    ..default()
+                },))
+                    .with_children(|line| {
+                        if m.is_alliance_leader {
+                            line.spawn(dot_node(LEADER_DOT));
+                            line.spawn(dot_node(LEADER_DOT));
+                        } else if m.is_party_leader {
+                            line.spawn(dot_node(LEADER_DOT));
+                        }
+                        line.spawn((
+                            Node {
+                                max_width: Val::Percent(100.0),
+                                ..default()
+                            },
+                            TextLayout::new_with_linebreak(bevy::text::LineBreak::AnyCharacter),
+                            Text::new(name_label),
+                            style::text_font(NAME_PX * s.scale.max(0.75)),
+                            TextColor(name_color),
+                        ));
+                        if let Some((label, color)) = flag {
+                            line.spawn((
+                                Text::new(label.to_string()),
+                                style::text_font(JOB_PX * s.scale.max(0.75)),
+                                TextColor(color),
+                            ));
+                        }
+                        if let Some(d) = member_dist {
+                            line.spawn((Node {
+                                flex_grow: 1.0,
+                                ..default()
+                            },));
+                            line.spawn((
+                                MemberDistText(m.id),
+                                Text::new(d),
+                                style::text_font(JOB_PX * s.scale.max(0.75)),
+                                TextColor(theme::MUTED),
+                            ));
+                        }
+                    });
                 bars.spawn(bar_track(hp_w, bar_h)).with_children(|hp| {
                     fill_or_block(
                         hp,
@@ -1045,49 +1084,6 @@ fn spawn_row_l1(
                             });
                         }
                     });
-                }
-            });
-
-        row.spawn((Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            right: Val::Px(0.0),
-            top: Val::Px(-NAME_PX * 0.45),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: Val::Px(4.0),
-            ..default()
-        },))
-            .with_children(|line| {
-                if m.is_alliance_leader {
-                    line.spawn(dot_node(LEADER_DOT));
-                    line.spawn(dot_node(LEADER_DOT));
-                } else if m.is_party_leader {
-                    line.spawn(dot_node(LEADER_DOT));
-                }
-                line.spawn((
-                    Text::new(name_label),
-                    style::text_font(NAME_PX * s.scale.max(0.75)),
-                    TextColor(name_color),
-                ));
-                if let Some((label, color)) = flag {
-                    line.spawn((
-                        Text::new(label.to_string()),
-                        style::text_font(JOB_PX * s.scale.max(0.75)),
-                        TextColor(color),
-                    ));
-                }
-                if let Some(d) = member_dist {
-                    line.spawn((Node {
-                        flex_grow: 1.0,
-                        ..default()
-                    },));
-                    line.spawn((
-                        MemberDistText(m.id),
-                        Text::new(d),
-                        style::text_font(JOB_PX * s.scale.max(0.75)),
-                        TextColor(theme::MUTED),
-                    ));
                 }
             });
     });
@@ -1238,7 +1234,7 @@ fn spawn_row_l2(
 fn spawn_placeholder_row(parent: &mut ChildSpawnerCommands, is_l1: bool, s: &PartyFrameSettings) {
     let sc = s.scale;
     let hp_w = if is_l1 {
-        L1_HP_BASE_W * BASE_MULT * L1_HP_W_MULT * sc
+        L1_HP_WIDTH * sc
     } else {
         L2_HP_BASE_W * BASE_MULT * sc
     };
