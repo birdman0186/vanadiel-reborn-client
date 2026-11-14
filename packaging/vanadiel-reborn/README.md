@@ -96,3 +96,17 @@ The handoff layout and Huffman resource bytes match the older build input.
 The build input remains pinned; the running server remains unchanged.
 Encrypted loopback tests cover character selection, handoff, and certificate mismatch rejection.
 Live server compatibility and GPU presentation still require a local test.
+
+## HUD pass 1
+
+The main party frame gives names and activity markers a separate line above HP.
+The HP track is wider. Long name lines can wrap without covering the bars.
+The alliance layout remains unchanged.
+
+The capture example uses the production party frame with synthetic data.
+It checks text intersections at 100%, 150%, and 200% UI scale.
+It includes solo, full-party, long-name, low-HP, and out-of-zone cases.
+A capture failure leaves visual verification incomplete, even if the client builds.
+Inspect all three PNG files before accepting the visual result.
+The package still needs a live check on the player's Windows PC.
+Keep the earlier package as the rollback copy.
