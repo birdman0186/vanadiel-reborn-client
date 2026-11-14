@@ -40,11 +40,10 @@ pub(crate) fn apply_server_profile(commands: &mut Commands, profile: &ServerProf
         flavor,
         profile.xiloader_version.as_deref(),
     ));
-    let lobby = Arc::new(LobbyClient::new(
-        profile.host.clone(),
-        profile.data_port,
-        profile.view_port,
-    ));
+    let lobby = Arc::new(
+        LobbyClient::new(profile.host.clone(), profile.data_port, profile.view_port)
+            .with_auth_client(&auth),
+    );
     commands.insert_resource(LauncherClients { auth, lobby });
     // A lobby handle belongs to the server that opened it, so anything left
     // over from the previous profile would be reused against a server that
