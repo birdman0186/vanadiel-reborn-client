@@ -1029,6 +1029,7 @@ async fn main() -> Result<()> {
             initial_state: None,
             playonline_session: None,
 
+            auth_options: None,
             user_driven_events: false,
             dat_root,
         })
