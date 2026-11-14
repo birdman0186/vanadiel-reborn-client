@@ -115,3 +115,12 @@ The off-screen fixture selects its UI camera explicitly and rejects uniform capt
 Its separate build disables optimization to reduce validation build time.
 The playable client keeps its optimized release build.
 Fixture captures establish layout evidence only; they do not establish game performance.
+
+The CI software renderer returned uniform frames during this pass.
+Computed text bounds passed at all three scales, but pixel verification remains blocked.
+The pixel guard rejects those frames. Capture failures fail explicit verification runs.
+The Windows package is a test candidate until a native screenshot confirms the layout.
+
+Off-screen capture runs only for commits marked `[hud-verify-only]`.
+Normal Windows builds keep the protocol tests, session tests, and package checks.
+Native visual acceptance remains separate from those build checks.
