@@ -55,6 +55,7 @@ jobs:
           cargo test --locked --release -p ffxi-proto -p ffxi-vocab -p kuluu-session --lib
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build party-frame capture
+        if: env.VDR_VERIFY_ONLY == 'true'
         env:
           CARGO_PROFILE_RELEASE_OPT_LEVEL: '0'
           CARGO_PROFILE_RELEASE_LTO: 'false'
@@ -64,14 +65,14 @@ jobs:
           cargo build --locked --release --target x86_64-pc-windows-msvc -p kuluu -p kuluu-render --no-default-features --features native-window --example party-frame-capture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Capture party-frame layout
+        if: env.VDR_VERIFY_ONLY == 'true'
         id: hud_capture
-        continue-on-error: true
         shell: pwsh
         run: |
           ./target/hud-capture/x86_64-pc-windows-msvc/release/examples/party-frame-capture.exe dist/hud-captures
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
-        if: always()
+        if: always() && env.VDR_VERIFY_ONLY == 'true'
         with:
           name: vdr-hud-captures-${{ github.sha }}
           path: dist/hud-captures/*.png
