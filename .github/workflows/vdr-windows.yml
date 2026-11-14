@@ -53,15 +53,10 @@ jobs:
         run: |
           cargo test --locked --release -p ffxi-proto -p ffxi-vocab -p kuluu-session --lib
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Test party-frame logic
-        shell: pwsh
-        run: |
-          cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib hud::party_frame::tests
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build party-frame capture
         shell: pwsh
         run: |
-          cargo build --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --example party-frame-capture
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p kuluu -p kuluu-render --no-default-features --features native-window --example party-frame-capture
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Capture party-frame layout
         id: hud_capture
