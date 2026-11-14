@@ -1713,6 +1713,7 @@ mod zone_teardown_tests {
 fn bridge_connecting(
     mut commands: Commands,
     mut pending: ResMut<PendingConnect>,
+    clients: Res<launcher_ui::LauncherClients>,
     runtime: Res<launcher_ui::RuntimeHandle>,
     server: Res<launcher_ui::ServerInfo>,
     ports: Res<SessionPorts>,
@@ -1746,6 +1747,7 @@ fn bridge_connecting(
         initial_state: Some(selection.initial_state),
         playonline_session,
 
+        auth_options: Some(clients.auth.connection_options()),
         user_driven_events: true,
         dat_root: dat_root_res.0.clone(),
     };
