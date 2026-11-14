@@ -75,6 +75,7 @@ async fn play_lifecycle_against_live_lsb() {
         initial_state: None,
         playonline_session: None,
         dat_root: None,
+        auth_options: None,
         user_driven_events: false,
     };
 

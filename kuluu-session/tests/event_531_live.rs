@@ -185,6 +185,7 @@ async fn event_531_stages_authored_owner_cues_against_live_lsb() {
         initial_state: None,
         playonline_session: None,
         dat_root: Some(Arc::new(dat_root)),
+        auth_options: None,
         user_driven_events: false,
     };
 

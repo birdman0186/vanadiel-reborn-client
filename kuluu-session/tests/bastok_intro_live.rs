@@ -313,6 +313,7 @@ async fn bastok_intro_auto_advances_and_event7_stays_manual() {
         initial_state: None,
         playonline_session: None,
         dat_root: Some(Arc::new(dat_root)),
+        auth_options: None,
         user_driven_events: false,
     };
 

@@ -335,6 +335,7 @@ async fn chocobo_rental_npc_completes_server_handoff() {
         initial_state: None,
         playonline_session: None,
         dat_root: Some(Arc::new(dat_root)),
+        auth_options: None,
         user_driven_events: false,
     };
 

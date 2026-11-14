@@ -62,6 +62,7 @@ async fn zone_change_reconnects_with_rotated_key() {
         initial_state: None,
         playonline_session: None,
         dat_root: None,
+        auth_options: None,
         user_driven_events: false,
     };
 
