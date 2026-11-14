@@ -5,7 +5,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
-use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot, ScreenshotCaptured};
 use bevy::winit::WinitPlugin;
 use kuluu_render::graphics_settings::GraphicsSettings;
 use kuluu_render::hud::party_frame::{
@@ -14,6 +14,7 @@ use kuluu_render::hud::party_frame::{
 use kuluu_render::{nameplate_color::NameColorTable, scene::Target, snapshot::SceneState};
 use kuluu_snapshot::{PartyMember, SceneSnapshot};
 
+const PIXEL_CHANNELS: usize = 4;
 const WIDTH: u32 = 1280;
 const HEIGHT: u32 = 1080;
 const SETTLE_FRAMES: u32 = 60;
@@ -72,7 +73,11 @@ fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         .map(PathBuf::from)
         .unwrap_or_else(|| std::env::temp_dir().join("kuluu-party-frame-capture"));
     std::fs::create_dir_all(&directory).expect("capture directory must be writable");
-    commands.spawn((Camera2d, RenderTarget::Image(image.clone().into())));
+    commands.spawn((
+        Camera2d,
+        IsDefaultUiCamera,
+        RenderTarget::Image(image.clone().into()),
+    ));
     commands.insert_resource(CaptureTarget { image, directory });
 }
 
@@ -204,7 +209,23 @@ fn drive(
     let name = format!("party-frame-{}.png", (scale.0 * 100.0) as u32);
     commands
         .spawn(Screenshot::image(target.image.clone()))
-        .observe(save_to_disk(target.directory.join(name)));
+        .observe(save_to_disk(target.directory.join(name)))
+        .observe(|capture: On<ScreenshotCaptured>| {
+            let pixels = capture
+                .image
+                .data
+                .as_deref()
+                .expect("capture pixels must exist");
+            let first = pixels
+                .first_chunk::<PIXEL_CHANNELS>()
+                .expect("capture pixels must not be empty");
+            assert!(
+                pixels
+                    .chunks_exact(PIXEL_CHANNELS)
+                    .any(|pixel| pixel != first),
+                "uniform capture cannot verify the HUD"
+            );
+        });
     println!(
         "PASS: party text does not overlap at {}% UI scale",
         scale.0 * 100.0
