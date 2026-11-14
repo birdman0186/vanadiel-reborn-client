@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
+use std::sync::Arc;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
 };
 
@@ -11,6 +12,10 @@ use ffxi_proto::login::{
 
 use crate::auth_client::{AuthRejected, AuthSession, LOBBY_AUTH_CODE_LEN};
 use crate::lobby_wire::{LobbyWire, SELECT_DLL_HASH_INDEX};
+
+trait LobbyStream: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> LobbyStream for T {}
+type LobbySocket = Box<dyn LobbyStream>;
 
 const DATA_CHARLIST_SIZE: usize = 0x148;
 
@@ -150,6 +155,7 @@ pub struct LobbyClient {
     /// open time.
     /// vendor/server/src/login/view_session.cpp
     pub excode_client: Option<u16>,
+    tls_config: Option<Arc<rustls::ClientConfig>>,
 }
 
 /// S2C 0x05: the lobby admitted the client version; the bitmasks say which
@@ -255,8 +261,8 @@ pub fn client_excode_client() -> u16 {
 }
 
 pub struct LobbyHandle {
-    view: TcpStream,
-    data: TcpStream,
+    view: LobbySocket,
+    data: LobbySocket,
 
     chars: Vec<CharSlot>,
     wire: LobbyWire,
@@ -478,6 +484,11 @@ fn build_view_select_by_id(
 }
 
 impl LobbyClient {
+    pub fn with_auth_client(mut self, auth: &crate::auth_client::AuthClient) -> Self {
+        self.tls_config = auth.lobby_tls_config();
+        self
+    }
+
     pub fn new(host: impl Into<String>, data_port: u16, view_port: u16) -> Self {
         Self {
             host: host.into(),
@@ -485,6 +496,7 @@ impl LobbyClient {
             view_port,
             version_code: None,
             excode_client: None,
+            tls_config: None,
         }
     }
 
@@ -647,11 +659,24 @@ impl LobbyClient {
         Ok(())
     }
 
-    async fn connect(&self, port: u16) -> Result<TcpStream> {
-        lobby_io("TCP connect", async {
-            TcpStream::connect((self.host.as_str(), port))
+    async fn connect(&self, port: u16) -> Result<LobbySocket> {
+        lobby_io("connect", async {
+            let tcp = TcpStream::connect((self.host.as_str(), port))
                 .await
-                .with_context(|| format!("TCP connect to {}:{}", self.host, port))
+                .with_context(|| format!("TCP connect to {}:{}", self.host, port))?;
+            let stream: LobbySocket = if let Some(config) = &self.tls_config {
+                let name = rustls_pki_types::ServerName::try_from(self.host.clone())?;
+                let connector = tokio_rustls::TlsConnector::from(config.clone());
+                Box::new(
+                    connector
+                        .connect(name, tcp)
+                        .await
+                        .context("TLS lobby handshake")?,
+                )
+            } else {
+                Box::new(tcp)
+            };
+            Ok(stream)
         })
         .await
     }
@@ -703,7 +728,7 @@ fn parse_key_reply(buf: &[u8; KEY_PACKET_SIZE]) -> Result<LobbyKey> {
 /// The 0x26 is answered with the 0x28-byte key on success or LSB's 0x24-byte
 /// error frame when the version lock rejects the client; the latter is a
 /// verdict on this install, so it is an [`AuthRejected`], not a retry.
-async fn read_key_reply(stream: &mut TcpStream) -> Result<LobbyKey> {
+async fn read_key_reply(stream: &mut (impl AsyncRead + Unpin)) -> Result<LobbyKey> {
     let mut size_bytes = [0u8; 4];
     stream
         .read_exact(&mut size_bytes)
@@ -903,7 +928,7 @@ const VIEW_REPLY_RESULT_SIZE: usize = 0x20;
 const VIEW_REPLY_ERROR_SIZE: usize = 0x24;
 const VIEW_REPLY_ERROR_RESULT: u8 = 0x04;
 
-async fn read_create_reply(stream: &mut TcpStream, stage: &str) -> Result<()> {
+async fn read_create_reply(stream: &mut (impl AsyncRead + Unpin), stage: &str) -> Result<()> {
     let mut size_bytes = [0u8; 4];
     stream
         .read_exact(&mut size_bytes)
@@ -937,7 +962,7 @@ async fn read_create_reply(stream: &mut TcpStream, stage: &str) -> Result<()> {
     }
 }
 
-async fn read_data_charlist(stream: &mut TcpStream) -> Result<(CharList, u32)> {
+async fn read_data_charlist(stream: &mut (impl AsyncRead + Unpin)) -> Result<(CharList, u32)> {
     let mut buf = vec![0u8; DATA_CHARLIST_SIZE];
     stream
         .read_exact(&mut buf)
@@ -990,7 +1015,7 @@ const GRAP_ID_MODEL_MASK: u16 = 0x0FFF;
 const GRAP_ID_SLOT_SHIFT: u32 = 12;
 const ZONE_NO2_HIGH_BIT: u8 = 0x01;
 
-async fn parse_view_chr_info2(stream: &mut TcpStream) -> Result<Vec<CharSlot>> {
+async fn parse_view_chr_info2(stream: &mut (impl AsyncRead + Unpin)) -> Result<Vec<CharSlot>> {
     tracing::debug!("lobby: waiting for chr_info2 packet on view socket");
     let mut size_bytes = [0u8; 4];
     stream
@@ -1112,7 +1137,7 @@ const NEXT_LOGIN_SERVER_IP_OFFSET: usize = 56;
 const NEXT_LOGIN_SERVER_PORT_OFFSET: usize = 60;
 
 async fn read_lpkt_next_login(
-    stream: &mut TcpStream,
+    stream: &mut (impl AsyncRead + Unpin),
     char_id: u32,
     key3: &[u8; 20],
 ) -> Result<MapHandoff> {
@@ -1177,6 +1202,9 @@ async fn read_lpkt_next_login(
 
 #[cfg(test)]
 mod tests {
+    mod tls_fixtures {
+        include!("lobby_tls_fixtures.rs");
+    }
     use super::*;
     use crate::auth_client::LobbyAuthCode;
     use crate::lobby_wire::HEADER_IDENTIFIER_OFFSET;
@@ -1640,6 +1668,14 @@ mod tests {
         let (mut view, _) = view.accept().await.ok()?;
         let (mut data, _) = data.accept().await.ok()?;
 
+        fake_lobby_exchange(&mut view, &mut data, roster).await
+    }
+
+    async fn fake_lobby_exchange(
+        view: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin),
+        data: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin),
+        roster: Vec<CharSlot>,
+    ) -> Option<Vec<u8>> {
         let mut login = [0u8; LOBBY_LOGIN_PACKET_SIZE];
         view.read_exact(&mut login).await.ok()?;
         assert_eq!(&login[8..12], &VIEW_CMD_LOBBY_LOGIN.to_le_bytes());
@@ -1667,6 +1703,107 @@ mod tests {
         .ok()?;
 
         Some(select)
+    }
+
+    fn tls_acceptor() -> tokio_rustls::TlsAcceptor {
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+        let certificate = CertificateDer::from(hex::decode(tls_fixtures::CERT).unwrap());
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            hex::decode(tls_fixtures::KEY).unwrap(),
+        ));
+        let config =
+            rustls::ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
+                .with_no_client_auth()
+                .with_single_cert(vec![certificate], key)
+                .unwrap();
+        tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config))
+    }
+
+    #[tokio::test]
+    async fn lsb_three_lobby_encrypts_both_connections_through_character_handoff() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let view = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let data = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let view_port = view.local_addr().unwrap().port();
+        let data_port = data.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let acceptor = tls_acceptor();
+            let (view, _) = view.accept().await.unwrap();
+            let mut view = acceptor.accept(view).await.unwrap();
+            let (data, _) = data.accept().await.unwrap();
+            let mut data = acceptor.accept(data).await.unwrap();
+            fake_lobby_exchange(
+                &mut view,
+                &mut data,
+                vec![slot(ROSTER_CHAR_ID, ROSTER_CHAR_NAME)],
+            )
+            .await
+        });
+        let auth = crate::auth_client::AuthClient::with_flavor_and_version(
+            "127.0.0.1",
+            1,
+            crate::auth_client::AuthFlavor::Json,
+            Some("3.0.0"),
+        );
+        let session = AuthSession {
+            account_id: 42,
+            session_hash: SESSION_HASH,
+            auth_code: LobbyAuthCode::NONE,
+        };
+        let result = LobbyClient::new("127.0.0.1", data_port, view_port)
+            .with_auth_client(&auth)
+            .handshake(&session, ROSTER_CHAR_ID, 0, KEY3)
+            .await
+            .expect("TLS lobby handshake");
+        assert_eq!(result.char_id, ROSTER_CHAR_ID);
+        assert_eq!(result.session_key_seed, EXPECTED_MAP_SEED);
+        assert!(server.await.unwrap().is_some());
+        assert!(auth.verifier.fingerprint_hex().is_some());
+    }
+
+    #[tokio::test]
+    async fn tls_lobby_rejects_changed_auth_certificate_without_plaintext_retry() {
+        use rustls::client::danger::ServerCertVerifier;
+        use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            assert!(tls_acceptor().accept(stream).await.is_err());
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
+                    .await
+                    .is_err()
+            );
+        });
+        let auth = crate::auth_client::AuthClient::with_flavor_and_version(
+            "127.0.0.1",
+            1,
+            crate::auth_client::AuthFlavor::Json,
+            Some("3.0.0"),
+        );
+        let certificate = CertificateDer::from(hex::decode(tls_fixtures::CHANGED_CERT).unwrap());
+        auth.verifier
+            .verify_server_cert(
+                &certificate,
+                &[],
+                &ServerName::try_from("localhost").unwrap(),
+                &[],
+                UnixTime::now(),
+            )
+            .unwrap();
+        let result = LobbyClient::new("127.0.0.1", port, port)
+            .with_auth_client(&auth)
+            .connect(port)
+            .await;
+        let error = match result {
+            Ok(_) => panic!("a changed authentication certificate must be rejected"),
+            Err(error) => error,
+        };
+        assert!(format!("{error:#}").contains("TOFU pin mismatch"));
+        server.await.unwrap();
     }
 
     /// The regression kuluu-3nd2 fixed: `CharSelection::Id` has no name to pass

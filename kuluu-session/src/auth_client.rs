@@ -320,6 +320,17 @@ impl<'de> Deserialize<'de> for LobbyAuthCode {
     }
 }
 
+// vendor/server/src/login/handler_session.cpp handler_session::start at LSB 7a91059f8569.
+// Loader major 3 introduced TLS on both lobby connections.
+const TLS_LOBBY_FIRST_MAJOR: u8 = 3;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthConnectionOptions {
+    pub flavor: AuthFlavor,
+    pub version: [u8; 3],
+    pub binary_version: [u8; auth_binary::VERSION_FIELD_LEN],
+}
+
 pub struct AuthClient {
     pub host: String,
     pub port: u16,
@@ -334,6 +345,33 @@ pub struct AuthClient {
 }
 
 impl AuthClient {
+    pub fn connection_options(&self) -> AuthConnectionOptions {
+        AuthConnectionOptions {
+            flavor: self.flavor,
+            version: self.version,
+            binary_version: self.binary_version,
+        }
+    }
+
+    pub fn with_connection_options(
+        host: impl Into<String>,
+        port: u16,
+        options: Option<AuthConnectionOptions>,
+    ) -> Self {
+        let mut client = Self::new(host, port);
+        if let Some(options) = options {
+            client.flavor = options.flavor;
+            client.version = options.version;
+            client.binary_version = options.binary_version;
+        }
+        client
+    }
+
+    pub fn lobby_tls_config(&self) -> Option<Arc<rustls::ClientConfig>> {
+        (self.flavor == AuthFlavor::Json && self.version[0] >= TLS_LOBBY_FIRST_MAJOR)
+            .then(|| self.config.clone())
+    }
+
     pub fn new(host: impl Into<String>, port: u16) -> Self {
         Self::with_flavor(host, port, AuthFlavor::Json)
     }
@@ -608,6 +646,47 @@ fn trim_trailing_zero(b: &[u8]) -> &[u8] {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn connection_options_preserve_loader_and_flavor_for_reconnect() {
+        for flavor in [
+            super::AuthFlavor::Json,
+            super::AuthFlavor::Binary,
+            super::AuthFlavor::PlayOnline,
+        ] {
+            let original =
+                super::AuthClient::with_flavor_and_version("localhost", 1, flavor, Some("3.0.7"));
+            let options = original.connection_options();
+            let restored =
+                super::AuthClient::with_connection_options("localhost", 1, Some(options));
+            assert_eq!(restored.connection_options(), options);
+            assert_eq!(
+                restored.lobby_tls_config().is_some(),
+                flavor == super::AuthFlavor::Json
+            );
+        }
+    }
+
+    #[test]
+    fn lobby_tls_reuses_authentication_pin_and_keeps_older_profiles_plain() {
+        let modern = super::AuthClient::with_flavor_and_version(
+            "localhost",
+            1,
+            super::AuthFlavor::Json,
+            Some("3.0.0"),
+        );
+        assert!(std::sync::Arc::ptr_eq(
+            &modern.config,
+            &modern.lobby_tls_config().unwrap()
+        ));
+        let older = super::AuthClient::with_flavor_and_version(
+            "localhost",
+            1,
+            super::AuthFlavor::Json,
+            Some("2.2.0"),
+        );
+        assert!(older.lobby_tls_config().is_none());
+    }
+
     use super::*;
 
     // vendor/server/src/login/auth_session.h SupportedXiloaderVersion
