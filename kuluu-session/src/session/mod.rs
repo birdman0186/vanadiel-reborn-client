@@ -208,6 +208,7 @@ pub struct Config {
     pub char_selection: CharSelection,
 
     pub initial_state: Option<InitialState>,
+    pub auth_options: Option<crate::auth_client::AuthConnectionOptions>,
 
     /// A session the PlayOnline Viewer handed off; when set, no auth server is
     /// contacted and `user`/`password` only label the session.
@@ -229,7 +230,8 @@ pub async fn run(
     mut cmd_rx: mpsc::Receiver<AgentCommand>,
     event_tx: broadcast::Sender<AgentEvent>,
 ) -> Result<()> {
-    let auth = AuthClient::new(cfg.server.clone(), cfg.auth_port);
+    let auth =
+        AuthClient::with_connection_options(cfg.server.clone(), cfg.auth_port, cfg.auth_options);
     let cert_sha256 = auth.verifier.fingerprint_hex();
 
     let (auth_session, handoff, resolved_char_id) = match cfg.initial_state.clone() {
@@ -253,7 +255,8 @@ pub async fn run(
             };
 
             emit_stage(&event_tx, Stage::LobbyHandshake);
-            let lobby = LobbyClient::new(cfg.server.clone(), cfg.data_port, cfg.view_port);
+            let lobby = LobbyClient::new(cfg.server.clone(), cfg.data_port, cfg.view_port)
+                .with_auth_client(&auth);
             let mut key3 = [0u8; 20];
             for (i, b) in key3.iter_mut().enumerate() {
                 *b = ((i as u8).wrapping_mul(KEY3_SEED_MULTIPLIER)) ^ KEY3_SEED_XOR;

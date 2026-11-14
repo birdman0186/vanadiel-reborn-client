@@ -4634,6 +4634,7 @@ fn fixture_config() -> Config {
         char_selection: CharSelection::Id(FIXTURE_PLAYER_PINNED),
         initial_state: None,
         playonline_session: None,
+        auth_options: None,
         user_driven_events: true,
         dat_root: None,
     }
