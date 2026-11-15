@@ -210,6 +210,9 @@ pub(super) fn confirm_menu_at_cursor(
                 push_system_chat_line(scene_state, "[menu] DLSS config reset to defaults".into());
             }
             Some(MenuRow::Action(MenuAction::DlssConfig)) => stack.push(MenuKind::GraphicsDlss),
+            Some(MenuRow::Action(MenuAction::Graphics)) => stack.push(MenuKind::Graphics),
+            #[cfg(feature = "debug-menu")]
+            Some(MenuRow::Action(MenuAction::Debug)) => stack.push(MenuKind::Debug),
             Some(MenuRow::Action(MenuAction::Controls)) => stack.push(MenuKind::Controls),
             _ => apply_settings_cycle(kind, cursor, 1, graphics),
         }
@@ -665,7 +668,8 @@ pub(super) fn handle_menu_key(
     // input system chained just before this one) also arrives here on the same
     // frame; absorb it once so it doesn't immediately flip Root to page 2
     // (kuluu-bi1s.2). Clear the one-shot flag on the first menu key regardless.
-    if stack.take_absorb_open_minus() && key_code == KeyCode::Minus {
+    let page_key = matches!(key_code, KeyCode::Minus | KeyCode::NumpadSubtract);
+    if stack.take_absorb_open_minus() && page_key {
         return None;
     }
 
@@ -696,7 +700,7 @@ pub(super) fn handle_menu_key(
     // Menu context (not text input), so reading the raw keycode is correct.
     // "-" flips the Command menu's two pages (retail HorizonXI); single-list
     // submenus have no pages, and the Map screen handles "-" in its own path.
-    if key_code == KeyCode::Minus {
+    if page_key {
         if kind == MenuKind::Root {
             if let Some(level) = stack.current_mut() {
                 level.cursor = kuluu_render::hud::menu::root_other_page_cursor(level.cursor);
@@ -1086,6 +1090,61 @@ mod menu_key_tests {
         world
     }
 
+    #[test]
+    fn keypad_minus_and_arrows_switch_pages_without_moving_the_row() {
+        use kuluu_render::hud::menu::{root_entries, root_other_page_cursor};
+
+        let mut harness = Harness::new();
+        let mut stack = MenuStack::root();
+        let mut world = marker_world();
+        let subtract = Key::Character("-".into());
+        let mut key = |key: &Key, code: KeyCode, stack: &mut MenuStack| {
+            assert!(harness
+                .key(key, code, stack, world.resource_mut())
+                .is_none());
+            stack.current().unwrap().cursor
+        };
+        assert_eq!(key(&subtract, KeyCode::NumpadSubtract, &mut stack), 0);
+        assert_eq!(
+            key(&Key::ArrowUp, KeyCode::ArrowUp, &mut stack),
+            root_other_page_cursor(0) - 1
+        );
+        let last = root_entries().len() - 1;
+        assert_eq!(key(&subtract, KeyCode::NumpadSubtract, &mut stack), last);
+        assert_eq!(
+            key(&Key::ArrowDown, KeyCode::ArrowDown, &mut stack),
+            root_other_page_cursor(0)
+        );
+        assert_eq!(key(&Key::ArrowLeft, KeyCode::ArrowLeft, &mut stack), 0);
+        assert_eq!(
+            key(&Key::ArrowRight, KeyCode::ArrowRight, &mut stack),
+            root_other_page_cursor(0)
+        );
+    }
+
+    #[test]
+    fn config_opens_the_graphics_submenu() {
+        use kuluu_render::graphics_settings::{config_rows, MenuAction, MenuRow};
+
+        let mut harness = Harness::new();
+        let mut stack = MenuStack::root();
+        stack.push(MenuKind::Config);
+        stack.current_mut().unwrap().cursor = config_rows()
+            .iter()
+            .position(|row| *row == MenuRow::Action(MenuAction::Graphics))
+            .unwrap();
+        let mut world = marker_world();
+        assert!(harness
+            .key(
+                &Key::Enter,
+                KeyCode::Enter,
+                &mut stack,
+                world.resource_mut()
+            )
+            .is_none());
+        assert_eq!(stack.current().unwrap().kind, MenuKind::Graphics);
+    }
+
     /// Row 0 of Config is the "Interface" section header, so the cursor
     /// settles onto the first selectable row below it.
     #[test]
@@ -1421,7 +1480,20 @@ mod menu_dispatch_tests {
 
     #[test]
     fn unwired_root_entries_stay_not_implemented() {
-        for label in ["Party", "Search", "Macros"] {
+        for label in [
+            "Synthesis",
+            "Party",
+            "Trade",
+            "Search",
+            "Linkshell",
+            "Region Info",
+            "Missions",
+            "Quests",
+            "View House",
+            "Bazaar",
+            "Macros",
+            "Help Desk",
+        ] {
             assert_eq!(
                 resolve_menu_entry(MenuKind::Root, label),
                 MenuDispatch::NotImplemented(label.into()),
