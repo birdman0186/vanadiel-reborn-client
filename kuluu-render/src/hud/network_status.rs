@@ -231,8 +231,8 @@ fn network_character<'a>(
     // The retail reference puts the percentage beside the meter and stacks S above R.
     let (x, y, room) = match line {
         0 => (21.0, 10.0, 36.0),
-        1 => (58.0, 4.0, width - 60.0),
-        _ => (58.0, 15.0, width - 60.0),
+        1 => (58.0, 7.0, width - 60.0),
+        _ => (58.0, 18.0, width - 60.0),
     };
     let prefix_space = if line == 0 { 0.0 } else { 6.0 };
     let natural_width = text.len() as f32 * 8.0 - prefix_space;
