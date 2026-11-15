@@ -10,7 +10,7 @@ use kuluu_snapshot::EntityKind;
 
 use crate::camera::CameraMode;
 use crate::components::{IsSelf, Nameplate, WorldEntity};
-use crate::input_mode::{InputMode, TargetActionState};
+use crate::input_mode::InputMode;
 use crate::scene::{BakedActor, Target};
 
 #[derive(Resource, Debug, Default, Clone, Copy)]
@@ -26,11 +26,7 @@ pub struct PickBridgePointer(pub Option<PointerId>);
 
 pub struct PickingPlugin;
 
-/// Gate for world-click targeting. When false, `click_to_target_system`
-/// ignores pointer clicks so UI clicks outside the game world (launcher /
-/// character-select buttons) can't leak into world targeting and spuriously
-/// open the target-action menu. Defaults true for the launcher-less wasm
-/// viewer; the native client toggles it per `AppPhase::InGame`.
+/// Launcher and character-selection clicks must not change world targets.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct WorldPickingEnabled(pub bool);
 
@@ -379,21 +375,19 @@ pub fn resolve_click_target(
     let resolution = match hit_id {
         Some(0) => match current_target {
             Some(_) => ClickResolution::Clear,
-            None => ClickResolution::OpenContextMenu,
+            None => ClickResolution::Ignored,
         },
 
-        Some(id) if Some(id) == current_target => ClickResolution::OpenContextMenu,
+        Some(id) if Some(id) == current_target => ClickResolution::Ignored,
 
         Some(id) => ClickResolution::Set(id),
 
         None => match current_target {
             Some(_) => ClickResolution::Clear,
-            None => ClickResolution::OpenContextMenu,
+            None => ClickResolution::Ignored,
         },
     };
     match resolution {
-        // Clicking the locked target still opens its menu — that is not a
-        // de-select, and it is the mouse route to Switch Target/Disengage.
         ClickResolution::Set(_) | ClickResolution::Clear if locked => ClickResolution::Ignored,
         other => other,
     }
@@ -405,13 +399,9 @@ pub enum ClickResolution {
 
     Clear,
 
-    OpenContextMenu,
-
     Ignored,
 }
 
-/// Self identity comes from the table's self slot, not a per-entity
-/// comparison against a snapshot field.
 pub fn click_to_target_system(
     mut clicks: MessageReader<PointerClick>,
     q_world: Query<&WorldEntity>,
@@ -419,14 +409,12 @@ pub fn click_to_target_system(
     q_nameplate: Query<&Nameplate>,
     pointer: Res<crate::mouse::MousePointer>,
     scene: Res<crate::snapshot::SceneState>,
-    table: Res<crate::entity_table::EntityTable>,
     enabled: Res<WorldPickingEnabled>,
     lock_on: Res<crate::lock_on::LockOn>,
-    fishing_spot: Res<crate::fishing_spot::FishingSpot>,
     hover_map: Res<HoverMap>,
     bridge: Res<PickBridgePointer>,
     mut target: ResMut<Target>,
-    mut input_mode: ResMut<InputMode>,
+    input_mode: Res<InputMode>,
 ) {
     if !enabled.0 {
         clicks.clear();
@@ -489,28 +477,6 @@ pub fn click_to_target_system(
         ClickResolution::Ignored => {}
         ClickResolution::Set(id) => target.id = Some(id),
         ClickResolution::Clear => target.id = None,
-        ClickResolution::OpenContextMenu => {
-            use crate::hud::action_model;
-            let engaged = matches!(
-                scene.snapshot.current_goal,
-                Some(kuluu_snapshot::ReactorGoal::Engaged { .. })
-            );
-            let ctx = action_model::context_for_target(
-                target.id,
-                &scene.snapshot.entities,
-                scene.snapshot.self_pos.pos,
-                table.self_id(),
-                engaged,
-                crate::hud::menu::any_usable_item(&scene.snapshot),
-                fishing_spot.0.is_ready(),
-                scene.snapshot.self_mount.is_some(),
-            );
-            if !action_model::build_target_action_entries(&ctx, &crate::hud::overlay::RETAIL)
-                .is_empty()
-            {
-                *input_mode = InputMode::TargetAction(TargetActionState::open(ctx));
-            }
-        }
     }
 }
 
@@ -585,8 +551,6 @@ mod tests {
             .is_none());
     }
 
-    /// click_to_target_system reads self from the table, so it is stamped to
-    /// match the snapshot's self_char_id.
     fn click_world() -> World {
         let mut world = World::new();
         world.insert_resource(Messages::<PointerClick>::default());
@@ -594,12 +558,8 @@ mod tests {
         let mut scene = crate::snapshot::SceneState::default();
         scene.snapshot.self_char_id = Some(7);
         world.insert_resource(scene);
-        let mut table = crate::entity_table::EntityTable::default();
-        table.set_self_id(Some(7));
-        world.insert_resource(table);
         world.insert_resource(WorldPickingEnabled(true));
         world.insert_resource(crate::lock_on::LockOn::default());
-        world.insert_resource(crate::fishing_spot::FishingSpot::default());
         world.insert_resource(HoverMap::default());
         world.insert_resource(PickBridgePointer::default());
         world.insert_resource(Target::default());
@@ -720,6 +680,75 @@ mod tests {
     }
 
     #[test]
+    fn mouse_click_on_empty_ground_does_not_open_menu() {
+        let mut world = click_world();
+        let background = world.spawn_empty().id();
+        set_hover(&mut world, &[(background, 0.0)]);
+        send_click(&mut world, background);
+        world.run_system_once(click_to_target_system).unwrap();
+        assert_eq!(world.resource::<Target>().id, None);
+        assert!(matches!(world.resource::<InputMode>(), InputMode::World));
+    }
+
+    #[test]
+    fn mouse_click_on_selected_entity_does_not_open_menu() {
+        for id in [7, 42] {
+            let mut world = click_world();
+            world.insert_resource(Target { id: Some(id) });
+            let (_, hitbox) = spawn_hit_entity(&mut world, id);
+            set_hover(&mut world, &[(hitbox, 1.0)]);
+            send_click(&mut world, hitbox);
+            world.run_system_once(click_to_target_system).unwrap();
+            assert_eq!(world.resource::<Target>().id, Some(id));
+            assert!(matches!(world.resource::<InputMode>(), InputMode::World));
+        }
+    }
+
+    #[test]
+    fn mouse_drag_does_not_select_or_open_menu() {
+        let mut world = click_world();
+        world
+            .resource_mut::<crate::mouse::MousePointer>()
+            .left_dragged = true;
+        let (_, hitbox) = spawn_hit_entity(&mut world, 42);
+        set_hover(&mut world, &[(hitbox, 1.0)]);
+        send_click(&mut world, hitbox);
+        world.run_system_once(click_to_target_system).unwrap();
+        assert_eq!(world.resource::<Target>().id, None);
+        assert!(matches!(world.resource::<InputMode>(), InputMode::World));
+    }
+
+    #[test]
+    fn mouse_click_cannot_retarget_or_close_a_keyboard_menu() {
+        let mut world = click_world();
+        world.insert_resource(InputMode::Menu(crate::input_mode::MenuStack::root()));
+        let (_, hitbox) = spawn_hit_entity(&mut world, 42);
+        set_hover(&mut world, &[(hitbox, 1.0)]);
+        send_click(&mut world, hitbox);
+        world.run_system_once(click_to_target_system).unwrap();
+        assert_eq!(world.resource::<Target>().id, None);
+        assert!(matches!(world.resource::<InputMode>(), InputMode::Menu(_)));
+    }
+
+    #[test]
+    fn mouse_click_preserves_locked_target() {
+        for hit in [None, Some(7), Some(42)] {
+            let mut world = click_world();
+            world.insert_resource(Target { id: Some(7) });
+            world.insert_resource(crate::lock_on::LockOn { target_id: Some(7) });
+            let entity = match hit {
+                None => world.spawn_empty().id(),
+                Some(id) => spawn_hit_entity(&mut world, id).1,
+            };
+            set_hover(&mut world, &[(entity, 1.0)]);
+            send_click(&mut world, entity);
+            world.run_system_once(click_to_target_system).unwrap();
+            assert_eq!(world.resource::<Target>().id, Some(7));
+            assert!(matches!(world.resource::<InputMode>(), InputMode::World));
+        }
+    }
+
+    #[test]
     fn click_on_new_entity_retargets() {
         assert_eq!(
             resolve_click_target(Some(17), Some(99), false),
@@ -736,10 +765,10 @@ mod tests {
     }
 
     #[test]
-    fn click_on_already_selected_opens_menu() {
+    fn click_on_already_selected_keeps_selection() {
         assert_eq!(
             resolve_click_target(Some(17), Some(17), false),
-            ClickResolution::OpenContextMenu,
+            ClickResolution::Ignored,
         );
     }
 
@@ -752,10 +781,10 @@ mod tests {
     }
 
     #[test]
-    fn click_on_id_zero_without_target_opens_menu() {
+    fn click_on_id_zero_without_target_does_nothing() {
         assert_eq!(
             resolve_click_target(Some(0), None, false),
-            ClickResolution::OpenContextMenu,
+            ClickResolution::Ignored,
         );
     }
 
@@ -842,10 +871,10 @@ mod tests {
     }
 
     #[test]
-    fn click_on_empty_without_target_opens_menu() {
+    fn click_on_empty_without_target_does_nothing() {
         assert_eq!(
             resolve_click_target(None, None, false),
-            ClickResolution::OpenContextMenu,
+            ClickResolution::Ignored,
         );
     }
 
@@ -866,10 +895,10 @@ mod tests {
     }
 
     #[test]
-    fn locked_click_on_the_target_still_opens_its_menu() {
+    fn locked_click_on_the_target_keeps_selection() {
         assert_eq!(
             resolve_click_target(Some(17), Some(17), true),
-            ClickResolution::OpenContextMenu,
+            ClickResolution::Ignored,
         );
     }
 }
