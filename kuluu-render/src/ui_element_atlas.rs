@@ -57,6 +57,7 @@ pub struct UiElementAtlas {
     generation: u64,
     loaded: bool,
     unavailable: bool,
+    layouts: HashMap<&'static str, Option<Arc<ffxi_dat::menu_layout::MenuLayout>>>,
     sprites: HashMap<(String, usize), Option<Handle<Image>>>,
     elements: HashMap<(String, usize), Option<Vec<UiElementQuad>>>,
 }
@@ -84,6 +85,23 @@ impl UiElementAtlas {
             self.generation = self.generation.wrapping_add(1);
         }
         self.window_style = selected;
+    }
+
+    pub fn ensure_layout(
+        &mut self,
+        name: &'static str,
+        root: &UiElementDatRoot,
+    ) -> Option<Arc<ffxi_dat::menu_layout::MenuLayout>> {
+        self.sync_root(root);
+        if let Some(layout) = self.layouts.get(name) {
+            return layout.clone();
+        }
+        let layout = self
+            .ensure_dats(root)
+            .iter()
+            .find_map(|bytes| ffxi_dat::menu_layout::find_menu_layout(bytes, name).map(Arc::new));
+        self.layouts.insert(name, layout.clone());
+        layout
     }
 
     pub fn ensure_element(
