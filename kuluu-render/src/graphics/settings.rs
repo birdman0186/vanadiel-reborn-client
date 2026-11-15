@@ -2015,6 +2015,9 @@ pub enum MenuAction {
     DlssConfig,
     ResetToMinimum,
     ResetDlssConfig,
+    Graphics,
+    #[cfg(feature = "debug-menu")]
+    Debug,
     Controls,
 }
 
@@ -2024,6 +2027,9 @@ impl MenuAction {
             MenuAction::DlssConfig => "DLSS Config",
             MenuAction::ResetToMinimum => "Reset to Minimum",
             MenuAction::ResetDlssConfig => "Reset DLSS Config",
+            MenuAction::Graphics => "Graphics",
+            #[cfg(feature = "debug-menu")]
+            MenuAction::Debug => "Debug",
             MenuAction::Controls => "Controls",
         }
     }
@@ -2100,9 +2106,16 @@ pub fn graphics_rows(dlss_supported: bool) -> Vec<MenuRow> {
     rows
 }
 
+pub const CONFIG_ACTIONS: &[MenuAction] = &[
+    MenuAction::Graphics,
+    #[cfg(feature = "debug-menu")]
+    MenuAction::Debug,
+    MenuAction::Controls,
+];
+
 pub fn config_rows() -> Vec<MenuRow> {
     let mut rows = section_rows(CONFIG_SECTIONS, |_| true);
-    rows.push(MenuRow::Action(MenuAction::Controls));
+    rows.extend(CONFIG_ACTIONS.iter().copied().map(MenuRow::Action));
     rows
 }
 
