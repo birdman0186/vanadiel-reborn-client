@@ -97,30 +97,46 @@ The build input remains pinned; the running server remains unchanged.
 Encrypted loopback tests cover character selection, handoff, and certificate mismatch rejection.
 Live server compatibility and GPU presentation still require a local test.
 
-## HUD pass 1
+## Classic HUD pass 1
 
-The main party frame gives names and activity markers a separate line above HP.
-The HP track is wider. Long name lines can wrap without covering the bars.
-The alliance layout remains unchanged.
+The default HUD has separate HP, MP, and TP gauges at the bottom right.
+Compact party entries appear above those gauges when a party exists.
+Each party entry has a name, HP gauge, and MP/TP values.
+The classic layout omits custom activity text, job icons, distances, and red bands.
+Target selection remains available through the party entries.
+The custom HUD remains available through UI Settings in debug builds.
+Keep the earlier Windows package for rollback.
 
-The capture example uses the production party frame with synthetic data.
-It checks text intersections at 100%, 150%, and 200% UI scale.
-It includes solo, full-party, long-name, low-HP, and out-of-zone cases.
-A capture failure leaves visual verification incomplete, even if the client builds.
-Inspect all three PNG files before accepting the visual result.
-The package still needs a live check on the player's Windows PC.
-Keep the earlier package as the rollback copy.
+The layout follows Square Enix's published classic-interface references.
+See [the source record](../../.agents/skills/retail-observe/references/classic-status-layout-2026-11-15.md).
+The current font, colors, dimensions, and flat borders are provisional.
+Exact retail window textures, gauge textures, and font matching remain pending.
+The TP gauge fill rule also needs retail confirmation.
+This pass does not restore every FFXI menu or establish complete interface parity.
 
-The off-screen fixture selects its UI camera explicitly and rejects uniform captures.
-Its separate build disables optimization to reduce validation build time.
-The playable client keeps its optimized release build.
-Fixture captures establish layout evidence only; they do not establish game performance.
+The production-widget fixture passed six rendered cases on Linux with Mesa Lavapipe Vulkan.
+All captures were opened and inspected.
+Solo and six-member parties passed at 100%, 150%, and 200% UI scale.
+The cases include a long name, low HP, zero MP, and an out-of-zone member.
+Computed text bounds did not intersect within each entry.
+Four automated tests cover solo status, missing self data, unavailable values, zoning, and layout rollback.
+Thirteen existing party-frame tests also passed.
+Those tests check grouping and custom layout behavior.
 
-The CI software renderer returned uniform frames during this pass.
-Computed text bounds passed at all three scales, but pixel verification remains blocked.
-The pixel guard rejects those frames. Capture failures fail explicit verification runs.
-The Windows package is a test candidate until a native screenshot confirms the layout.
+Run the fixture with:
 
-Off-screen capture runs only for commits marked `[hud-verify-only]`.
-Normal Windows builds keep the protocol tests, session tests, and package checks.
-Native visual acceptance remains separate from those build checks.
+```sh
+cargo run --locked --release -p kuluu-render --example party-frame-capture -- /absolute/capture/directory
+```
+
+The six output files use `classic-solo-100.png` through `classic-party-200.png` names.
+The fixture uses synthetic data and production widgets.
+Its captures do not establish Windows GPU behavior, live gameplay, or performance.
+The Windows workflow builds the playable client and runs the four new state tests.
+A live Windows screenshot remains required before accepting this candidate.
+Keep the working server and original FFXI client unchanged.
+
+The earlier Windows software-renderer capture returned uniform frames.
+The fixture rejects uniform images.
+Explicit `[hud-verify-only]` runs still fail if capture fails.
+Normal Windows package builds do not run that off-screen capture.
