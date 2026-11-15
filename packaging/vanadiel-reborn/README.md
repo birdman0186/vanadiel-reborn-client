@@ -140,3 +140,52 @@ The earlier Windows software-renderer capture returned uniform frames.
 The fixture rejects uniform images.
 Explicit `[hud-verify-only]` runs still fail if capture fails.
 Normal Windows package builds do not run that off-screen capture.
+
+## Original interface restoration
+
+The status layout above is an approximation.
+It does not satisfy the requested original FFXI windows, fonts, menus, and controls.
+Original resource loading and menu behavior need separate verification.
+Do not describe the current client as a complete original-interface restoration.
+
+The target includes original window artwork, fonts, cursors, status displays, chat, dialogs, and game menus.
+Compare main commands, Status, Equipment, Items, Magic, Abilities, party controls, trade, shops, and auction windows against the original client.
+Preserve keyboard and controller confirmation, cancellation, targeting, and navigation.
+The requested mouse preference disables automatic world-click menus.
+Clicks still select targets and clear unlocked targets on empty ground.
+Keyboard and controller handlers remain unchanged.
+
+The mouse correction has 24 passing production-system tests.
+The tests cover empty ground, selected entities, dragging, locks, and an open keyboard menu.
+These tests use synthetic events.
+Live Windows mouse input and menu navigation remain unverified.
+The correction is not included in the earlier Windows ZIP.
+
+The available Drive texture pack omits the original window DATs.
+Collect the required resources from the installed game:
+
+```powershell
+.\Collect-VdrUiResources.ps1
+```
+
+The default game path is `E:\Final Fantasy XI\SquareEnix\FINAL FANTASY XI`.
+Use `-GameRoot` to select another installation.
+The script writes a uniquely named ZIP to the Desktop.
+Use `-OutputDirectory` to select another output directory.
+Upload that ZIP for resource inspection.
+
+The collector copies the index tables, early UI DATs, and static menu resource DATs.
+Its manifest records copied files, sizes, hashes, and missing optional files.
+It checks source hashes before and after each copy.
+It rejects output directories inside the game installation.
+The repository and client packages contain no collected game resources.
+
+Run the collector checks with:
+
+```powershell
+.\Test-UiResourceCollector.ps1
+```
+
+The collector checks passed with synthetic files on PowerShell 7 for Linux.
+They check archive contents, hashes, source preservation, output boundaries, and missing required files.
+Windows PowerShell execution remains unverified.
