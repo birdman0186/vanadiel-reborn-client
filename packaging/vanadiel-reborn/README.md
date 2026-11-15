@@ -161,8 +161,48 @@ These tests use synthetic events.
 Live Windows mouse input and menu navigation remain unverified.
 The correction is not included in the earlier Windows ZIP.
 
-The available Drive texture pack omits the original window DATs.
-Collect the required resources from the installed game:
+The owner supplied the missing original window and menu resources.
+All 46 collected files match the manifest sizes and SHA-256 hashes.
+The client reads this artwork from the selected installation at runtime.
+The repository and client packages contain no collected game resources.
+
+The shared frame renderer reads all eight original styles.
+It uses their background, corner, and border textures with authored geometry and vertex colors.
+Command labels, supported menu titles, and the selection cursor use original sprite components.
+Menu text remains available as a fallback when artwork cannot load.
+The loader resolves textures across static menu DATs and the selected window style.
+It refreshes cached artwork when the installation or style changes.
+
+This pass does not restore the complete original interface.
+Dynamic text still uses the existing font.
+Command order, available actions, window positions, and cursor animation still need original-client comparison.
+The renderer currently uses background element zero.
+Active/inactive background switching remains open.
+Several original menu screens and commands remain unavailable.
+Keep these acceptance cases open.
+
+Run the production artwork fixture with:
+
+```bash
+FFXI_DAT_PATH=/path/to/FFXI cargo run --locked --release -p kuluu-render --example original-ui-capture -- /absolute/capture/directory
+```
+
+The fixture renders each style at 100%, 150%, and 200% UI scale.
+It uses production menu and status widgets with synthetic session data.
+It rejects collapsed menu rows, overlapping rows, and overlapping status text.
+It also rejects overlap between the Command menu and status windows.
+These captures cannot establish live Windows input, gameplay, or performance.
+
+The local library suite passed 2,366 tests, with four ignored tests.
+Focused resource and menu checks passed 53 tests.
+The 24 artwork captures passed and were inspected.
+Additional production captures checked Items, dialog, and delivery window frames.
+The collected subset lacks their item icon DATs.
+Those captures show empty icon cells and cannot verify quantities over bright or dark icons.
+Scoped Clippy, blocking-policy fixtures, formatting, and source checks passed.
+Live Windows input and original-client comparison remain unverified.
+
+For another resource collection, run:
 
 ```powershell
 .\Collect-VdrUiResources.ps1
@@ -172,7 +212,7 @@ The default game path is `E:\Final Fantasy XI\SquareEnix\FINAL FANTASY XI`.
 Use `-GameRoot` to select another installation.
 The script writes a uniquely named ZIP to the Desktop.
 Use `-OutputDirectory` to select another output directory.
-Upload that ZIP for resource inspection.
+Use that ZIP for private resource inspection.
 
 The collector copies the index tables, early UI DATs, and static menu resource DATs.
 Its manifest records copied files, sizes, hashes, and missing optional files.
@@ -185,6 +225,14 @@ Run the collector checks with:
 ```powershell
 .\Test-UiResourceCollector.ps1
 ```
+
+If PowerShell blocks the unsigned collector, permit only its new process:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\Collect-VdrUiResources.ps1"
+```
+
+This command does not change the saved execution policy.
 
 The collector checks passed with synthetic files on PowerShell 7 for Linux.
 They check archive contents, hashes, source preservation, output boundaries, and missing required files.
