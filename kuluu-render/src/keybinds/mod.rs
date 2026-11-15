@@ -223,10 +223,13 @@ impl Bindings {
     }
 
     pub fn just_pressed(&self, action: Action, keys: &ButtonInput<KeyCode>) -> bool {
-        match self.map.get(&action) {
-            Some(b) => keys.just_pressed(b.key) && b.mods.matches(keys),
-            None => false,
-        }
+        let Some(bind) = self.map.get(&action) else {
+            return false;
+        };
+        let keypad_menu = action == Action::OpenMenu
+            && bind.key == KeyCode::Minus
+            && keys.just_pressed(KeyCode::NumpadSubtract);
+        (keys.just_pressed(bind.key) || keypad_menu) && bind.mods.matches(keys)
     }
 
     pub fn matches_logical(&self, action: Action, key: &Key) -> bool {
@@ -438,6 +441,15 @@ mod tests {
         let b = Bindings::empty();
         let keys = pressed_keys(&[KeyCode::KeyW]);
         assert!(!b.pressed(Action::MoveForward, &keys));
+    }
+
+    #[test]
+    fn keypad_minus_opens_the_default_menu_and_respects_rebinding() {
+        let keys = pressed_keys(&[KeyCode::NumpadSubtract]);
+        let mut bindings = Bindings::default();
+        assert!(bindings.just_pressed(Action::OpenMenu, &keys));
+        bindings.insert(Action::OpenMenu, KeyBind::new(KeyCode::KeyM));
+        assert!(!bindings.just_pressed(Action::OpenMenu, &keys));
     }
 
     #[test]
