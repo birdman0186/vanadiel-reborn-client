@@ -6,6 +6,7 @@ pub mod cast_bar;
 pub mod chat_input;
 pub mod chat_panel;
 pub mod check_view;
+pub mod classic_status;
 pub mod compass;
 #[cfg(feature = "enhanced-death-countdown")]
 pub mod death_countdown;
@@ -384,7 +385,10 @@ impl Plugin for HudPlugin {
                 ),
                 vana_clock::update_vana_clock,
                 zone_flash::update_zone_flash,
-                party_frame::update_party_frame_system,
+                (
+                    party_frame::update_party_frame_system,
+                    classic_status::update_classic_status_system,
+                ),
                 party_frame::update_ui_settings_system,
                 self_fishing::update_fishing_hud,
                 (

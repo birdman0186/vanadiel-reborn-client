@@ -1,22 +1,4 @@
-//! XIUI-style party/alliance frame — the single party/self HUD.
-//!
-//! Self is row 0 of Party A (XIUI behavior), so there is exactly ONE panel
-//! drawing player/party state. This module owns the ROSTER column slot.
-//!
-//! Geometry:
-//! - Party A = L1 "compact vertical": no name row — the name overlays the HP
-//!   bar's top edge, bars start right of a fixed job-icon slot, MP bar is
-//!   right-aligned under the HP bar.
-//! - Alliance B/C = L2 "super compact": one text row [name … HP value] that
-//!   dips into the HP bar's top; entry box wider than the bars with the bars
-//!   right-aligned in the box; MP bar tucked up under the HP bar.
-//!
-//! Runtime knobs live in `PartyFrameSettings`, edited only from the Debug
-//! menu "UI Settings" panel. No user-facing settings UI.
-//!
-//! Data: SceneSnapshot.party (GROUP_LIST 0x0DD / GROUP_ATTR 0x0DF; see
-//! vendor/server/src/map/packets/s2c/0x0dd_group_list.cpp), Res<Target>,
-//! NameColorTable, ZoneNameResolver.
+//! .agents/skills/retail-observe/references/classic-status-layout-2026-11-15.md separates the classic baseline from custom HUD options.
 
 use bevy::picking::events::PointerPress;
 use bevy::picking::hover::Hovered;
@@ -88,6 +70,7 @@ const FLAG_BAZAAR: Color = Color::srgb(1.00, 0.80, 0.20);
 
 #[derive(Resource, Clone)]
 pub struct PartyFrameSettings {
+    pub classic_layout: bool,
     /// Per-window layout override: 0 = default (A=L1, B/C=L2), 1 = force L1,
     /// 2 = force L2. The ONLY layout switching that exists anywhere.
     pub layout_a: u8,
@@ -119,6 +102,7 @@ pub struct PartyFrameSettings {
 impl Default for PartyFrameSettings {
     fn default() -> Self {
         Self {
+            classic_layout: true,
             layout_a: 0,
             layout_b: 0,
             layout_c: 0,
@@ -219,6 +203,7 @@ pub struct UiSettingsPanel;
 /// One clickable settings row. `key` indexes the setting it toggles/cycles.
 #[derive(Component, Clone, Copy, PartialEq)]
 pub enum UiSettingKey {
+    HudStyle,
     LayoutA,
     LayoutB,
     LayoutC,
@@ -247,6 +232,14 @@ fn setting_label(key: UiSettingKey, s: &PartyFrameSettings) -> String {
     };
     let onoff = |b: bool| if b { "on" } else { "off" };
     match key {
+        UiSettingKey::HudStyle => format!(
+            "HUD style [{}]",
+            if s.classic_layout {
+                "Classic"
+            } else {
+                "Custom"
+            }
+        ),
         UiSettingKey::LayoutA => format!("Layout A [{}]", layout(s.layout_a)),
         UiSettingKey::LayoutB => format!("Layout B [{}]", layout(s.layout_b)),
         UiSettingKey::LayoutC => format!("Layout C [{}]", layout(s.layout_c)),
@@ -278,6 +271,7 @@ fn setting_label(key: UiSettingKey, s: &PartyFrameSettings) -> String {
 /// 0..=6.
 fn cycle_setting(key: UiSettingKey, s: &mut PartyFrameSettings) {
     match key {
+        UiSettingKey::HudStyle => s.classic_layout = !s.classic_layout,
         UiSettingKey::LayoutA => s.layout_a = (s.layout_a + 1) % 3,
         UiSettingKey::LayoutB => s.layout_b = (s.layout_b + 1) % 3,
         UiSettingKey::LayoutC => s.layout_c = (s.layout_c + 1) % 3,
@@ -327,7 +321,7 @@ fn lerp_rgb(a: (f32, f32, f32), b: (f32, f32, f32), t: f32) -> Color {
     )
 }
 
-fn party_windows(
+pub(super) fn party_windows(
     party: &[kuluu_snapshot::PartyMember],
     self_id: Option<u32>,
 ) -> [Vec<&kuluu_snapshot::PartyMember>; 3] {
@@ -382,6 +376,7 @@ fn max_from_pct(m: &kuluu_snapshot::PartyMember) -> u32 {
 /// (Party A only, owned by update_party_dist_text_system). The rows host
 /// (re)builds member entries each dirty frame.
 pub fn spawn_party_frames(mut commands: Commands) {
+    super::classic_status::spawn_classic_frames(&mut commands);
     for party_no in 0u8..3 {
         let is_l1_default = party_no == 0;
         let pad_x = if is_l1_default { 10.0 } else { 3.0 };
@@ -478,6 +473,7 @@ pub fn spawn_party_frames(mut commands: Commands) {
 
 fn spawn_ui_settings_panel(mut commands: Commands) {
     let rows = [
+        UiSettingKey::HudStyle,
         UiSettingKey::LayoutA,
         UiSettingKey::LayoutB,
         UiSettingKey::LayoutC,
@@ -581,6 +577,12 @@ pub fn update_party_frame_system(
     host_q: Query<(Entity, &PartyRowsHost, Option<&Children>)>,
     mut last_key: Local<Option<PartyContentKey>>,
 ) {
+    if settings.classic_layout {
+        for (_, mut node) in &mut root_q {
+            node.display = Display::None;
+        }
+        return;
+    }
     let snap = &state.snapshot;
     #[cfg(feature = "enhanced-job-display")]
     let job_on = graphics.job_display;
@@ -755,7 +757,7 @@ pub struct PartyContentKey {
     job_display: bool,
 }
 
-fn party_content_key(
+pub(super) fn party_content_key(
     snap: &kuluu_snapshot::SceneSnapshot,
     name_color_generation: u64,
     job_display: bool,
@@ -828,7 +830,7 @@ pub fn update_party_dist_text_system(
                 .map(|e| dist_str(self_pos, e.pos))
                 .unwrap_or_default()
         } else if target_dist.is_some() {
-            if settings.show_target_distance {
+            if settings.show_target_distance && !settings.classic_layout {
                 target_dist_text(target.id, snap, self_pos)
             } else {
                 String::new()
