@@ -304,13 +304,17 @@ fn update_frames(
 }
 
 fn update_surface_size(
-    surfaces: Query<(&ComputedNode, &MaterialNode<RetailFrameMaterial>), With<FrameSurface>>,
+    surfaces: Query<
+        (&ComputedNode, &MaterialNode<RetailFrameMaterial>, &ChildOf),
+        With<FrameSurface>,
+    >,
+    authored: Query<(), With<super::retail_layout::OriginalBackdrop>>,
     mut materials: ResMut<Assets<RetailFrameMaterial>>,
 ) {
-    for (node, handle) in &surfaces {
+    for (node, handle, parent) in &surfaces {
         if let Some(mut material) = materials.get_mut(handle) {
             material.data.logical_size = (node.size() * node.inverse_scale_factor())
-                .extend(0.0)
+                .extend(f32::from(authored.contains(parent.parent())))
                 .extend(0.0);
         }
     }

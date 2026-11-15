@@ -38,6 +38,7 @@ pub mod overlay;
 pub mod panel_column;
 pub mod quick_action;
 pub mod retail_frame;
+pub mod retail_layout;
 pub mod retail_text;
 pub mod stair_debug;
 // (roster mockup deleted — real party/self HUD is party_frame.rs)
@@ -491,6 +492,10 @@ impl Plugin for HudPlugin {
         #[cfg(feature = "enhanced-death-countdown")]
         app.add_systems(Update, death_countdown::update_death_countdown_system);
 
+        app.add_systems(
+            PostUpdate,
+            network_status::sync_network_layout.before(retail_frame::OriginalFrameUpdate),
+        );
         app.add_systems(Update, chat_panel::chat_tab_click_system);
         app.add_systems(Update, chat_panel::chat_auto_switch_click_system);
 

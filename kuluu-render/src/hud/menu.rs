@@ -13,75 +13,101 @@ use crate::input_mode::{InputMode, MenuKind, MenuStack};
 
 pub const ROOT_LOG_OUT: &str = "Log Out";
 pub const ROOT_SHUT_DOWN: &str = "Shut Down";
-// Label and position are provisional pending a retail main-menu capture
-// (bead kuluu-y5hq retail_unknowns).
+pub const ROOT_MOG_HOUSE: &str = "Mog House";
 pub const ROOT_CURRENT_TIME: &str = "Current Time";
-
-// "Communication" position is provisional pending a retail main-menu capture
-// (bead kuluu-d4u retail_unknowns).
 pub const ROOT_COMMUNICATION: &str = "Communication";
 pub const COMM_EMOTE_LIST: &str = "Emote List";
 
-/// Retail's Command menu is a single pane with two pages, flipped with "-" (or
-/// the Left/Right arrows). ROOT_ENTRIES is page 1 followed by page 2; the page a
-/// cursor is on is derived from its index (root_page_bounds), so no separate page
-/// state is needed. Order mirrors retail HorizonXI for the commands we implement
-/// (Synthesis/Trade/Linkshell/Region Info/Missions/Quests/View House/Bazaar/Help
-/// Desk are dropped; Graphics/Debug are ours, grouped with the page-2 config-like
-/// commands). The Debug entry renders only when built with `--features
-/// debug-menu` — opt-in and off by default, so retail parity holds as long as
-/// shipped builds do not enable the flag; local test batches (build_cowland.bat)
-/// pass it on RELEASE builds on purpose.
+pub const ROOT_PAGE_LAYOUTS: [&str; 2] = ["menu    menuwind", "menu    socialme"];
+const ROOT_PAGE_1_LEN: usize = 12;
+
+// .agents/skills/retail-observe/references/original-ui-resources-2026-11-15.md, Command rows.
 const ROOT_ENTRIES: &[&str] = &[
-    // Page 1
     "Status",
     "Equipment",
     "Magic",
     "Items",
+    "Synthesis",
     "Abilities",
     "Party",
+    "Trade",
     "Search",
+    "Linkshell",
+    "Region Info",
     "Map",
-    // Page 2
+    "Missions",
+    "Quests",
     "Key Items",
+    "View House",
+    "Bazaar",
     "Macros",
     "Config",
+    "Help Desk",
     ROOT_CURRENT_TIME,
     ROOT_COMMUNICATION,
-    "Graphics",
-    #[cfg(feature = "debug-menu")]
-    "Debug",
     ROOT_SHUT_DOWN,
     ROOT_LOG_OUT,
 ];
 
-const ROOT_PAGE_1_LEN: usize = 8;
-
-// .agents/skills/retail-observe/references/original-ui-resources-2026-11-15.md Command labels.
-const ROOT_LABEL_SPRITES: &[Option<usize>] = &[
+pub(super) const ROOT_LABEL_SPRITES: &[Option<usize>] = &[
     Some(13),
     Some(15),
     Some(17),
     Some(19),
+    Some(680),
     Some(21),
     Some(20),
+    Some(28),
     Some(18),
+    Some(16),
+    Some(25),
     Some(23),
+    Some(24),
+    Some(26),
     Some(22),
+    Some(31),
+    Some(30),
     Some(29),
     Some(27),
+    Some(36),
     Some(34),
-    None,
-    None,
-    #[cfg(feature = "debug-menu")]
-    None,
+    Some(766),
     Some(35),
     Some(33),
 ];
 
+// .agents/skills/retail-observe/references/original-ui-resources-2026-11-15.md, Mog House button.
+const MOG_HOUSE_SPRITE: usize = 44;
+
+fn root_command(index: usize, in_mog_house: bool) -> Option<(&'static str, usize)> {
+    let label = *ROOT_ENTRIES.get(index)?;
+    if in_mog_house && label == "Map" {
+        return Some((ROOT_MOG_HOUSE, MOG_HOUSE_SPRITE));
+    }
+    Some((label, ROOT_LABEL_SPRITES.get(index).copied().flatten()?))
+}
+
+pub fn entry_label_in_scene<'a>(
+    kind: MenuKind,
+    idx: usize,
+    dynamic: &'a DynamicMenu,
+    scene: &kuluu_snapshot::SceneSnapshot,
+) -> &'a str {
+    if kind == MenuKind::Root {
+        if let Some((label, _)) = root_command(idx, scene.myroom.is_some()) {
+            return label;
+        }
+    }
+    entry_label(kind, idx, dynamic)
+}
+
+pub fn root_layout_name(cursor: usize) -> &'static str {
+    ROOT_PAGE_LAYOUTS[usize::from(cursor >= ROOT_PAGE_1_LEN)]
+}
+
 const MENU_TITLE_GROUP: &str = "menu    comwin";
 
-fn original_title(kind: MenuKind) -> Option<RetailMenuLabel> {
+pub(super) fn original_title(kind: MenuKind) -> Option<RetailMenuLabel> {
     let index = match kind {
         MenuKind::Root => 16,
         MenuKind::Status => 17,
@@ -108,12 +134,13 @@ pub fn root_page_bounds(cursor: usize) -> (usize, usize) {
     }
 }
 
-/// The cursor index that flips to the other Root page, landing on its first row.
+/// Keep the highlighted row when the player changes pages.
+/// .agents/skills/retail-observe/references/vanilla-menu-spec.md
 pub fn root_other_page_cursor(cursor: usize) -> usize {
     if cursor < ROOT_PAGE_1_LEN {
-        ROOT_PAGE_1_LEN
+        cursor + ROOT_PAGE_1_LEN
     } else {
-        0
+        (cursor - ROOT_PAGE_1_LEN).min(ROOT_PAGE_1_LEN - 1)
     }
 }
 
@@ -490,7 +517,7 @@ const fn section_row_count(sections: &[GraphicsSection]) -> usize {
 
 const MAX_ENTRY_COUNT: usize = {
     let r = ROOT_ENTRIES.len();
-    let c = section_row_count(CONFIG_SECTIONS) + 1;
+    let c = section_row_count(CONFIG_SECTIONS) + crate::graphics_settings::CONFIG_ACTIONS.len();
     let g = section_row_count(GRAPHICS_SECTIONS) + 2;
     let e = EQUIPMENT_ENTRIES.len();
     let s = STATUS_LABELS.len();
@@ -687,13 +714,8 @@ pub fn menu_title(kind: MenuKind) -> &'static str {
     }
 }
 
-/// The submenu a Root category drills into, and thus the level the right pane
-/// previews while that category is highlighted at Root. Single source for the
-/// Root → submenu mapping: `text_input::resolve_menu_entry` drills through this
-/// so the client dispatch and the preview can't disagree (guarded by a test in
-/// the client). `None` = a Root entry with no browsable submenu (Party/Search/
-/// Macros fire commands or aren't built; Current Time/Log Out/Shut Down act
-/// directly), so the right pane shows no preview.
+/// The root submenu used by both the preview and the confirm action.
+/// Map uses its own screen. Direct actions and unavailable commands have no preview.
 pub fn root_child_kind(label: &str) -> Option<MenuKind> {
     Some(match label {
         "Magic" => MenuKind::Magic,
@@ -703,9 +725,7 @@ pub fn root_child_kind(label: &str) -> Option<MenuKind> {
         "Equipment" => MenuKind::Equipment,
         "Status" => MenuKind::Status,
         ROOT_COMMUNICATION => MenuKind::Communication,
-        "Graphics" => MenuKind::Graphics,
         "Config" => MenuKind::Config,
-        "Debug" => MenuKind::Debug,
         _ => return None,
     })
 }
@@ -775,6 +795,7 @@ pub struct MainMenuPane;
 pub fn sync_original_command_labels(
     mut commands: Commands,
     mode: Res<InputMode>,
+    scene: Res<crate::snapshot::SceneState>,
     rows: Query<(
         Entity,
         &MainMenuRow,
@@ -807,9 +828,9 @@ pub fn sync_original_command_labels(
             let (start, end) = root_page_bounds(level.cursor);
             let index = start + row.slot;
             (index < end)
-                .then(|| ROOT_LABEL_SPRITES.get(index).copied().flatten())
+                .then(|| root_command(index, scene.snapshot.myroom.is_some()))
                 .flatten()
-                .map(|sprite| {
+                .map(|(_, sprite)| {
                     (
                         RetailMenuLabel::new(WINDOW_LABEL_GROUP, sprite),
                         RetailMenuCursor::command(level.cursor == index),
@@ -1360,8 +1381,25 @@ pub fn update_main_menu(
 
     scene: Res<crate::snapshot::SceneState>,
     dynamic: Res<DynamicMenu>,
-    mut menu_q: Query<&mut Node, (With<MainMenu>, Without<MainMenuRow>, Without<MainMenuPane>)>,
-    mut pane_q: Query<&mut Node, (With<MainMenuPane>, Without<MainMenuRow>)>,
+    original: Option<Res<super::retail_layout::CommandLayout>>,
+    inset: Option<Res<super::retail_layout::CommandInset>>,
+    mut menu_q: Query<
+        &mut Node,
+        (
+            With<MainMenu>,
+            Without<MainMenuRow>,
+            Without<MainMenuPane>,
+            Without<MainMenuTitle>,
+        ),
+    >,
+    mut pane_q: Query<
+        &mut Node,
+        (
+            With<MainMenuPane>,
+            Without<MainMenuRow>,
+            Without<MainMenuTitle>,
+        ),
+    >,
     mut row_q: Query<
         (
             &MainMenuRow,
@@ -1372,7 +1410,7 @@ pub fn update_main_menu(
         ),
         Without<MainMenuTitle>,
     >,
-    mut title_q: Query<(&MainMenuTitle, &mut Text), Without<MainMenuRow>>,
+    mut title_q: Query<(&MainMenuTitle, &mut Text, &mut Node), Without<MainMenuRow>>,
 ) {
     let Ok(mut node) = menu_q.single_mut() else {
         return;
@@ -1404,16 +1442,67 @@ pub fn update_main_menu(
     if node.display != Display::Flex {
         node.display = Display::Flex;
     }
-    let want_width = Val::Px(pane_width_for(top_kind));
-    for mut pane_node in pane_q.iter_mut() {
-        if pane_node.width != want_width {
-            pane_node.width = want_width;
+    let page = original.as_deref().and_then(|layout| layout.page());
+    let (top, right) = page.map_or(
+        (
+            48.0,
+            style::PANEL_WIDTH_PX + style::PANEL_COLUMN_RIGHT_PX + style::PANEL_COLUMN_GAP_PX,
+        ),
+        |page| {
+            (
+                f32::from(page.root.y),
+                super::retail_layout::right_clearance(page)
+                    + inset.as_deref().map_or(0.0, |inset| inset.extra()),
+            )
+        },
+    );
+    if (node.top, node.right) != (Val::Px(top), Val::Px(right)) {
+        node.top = Val::Px(top);
+        node.right = Val::Px(right);
+    }
+    for mut pane in &mut pane_q {
+        let (width, height, padding, border, gap) = if let Some(page) = page {
+            (
+                Val::Px(f32::from(page.root.width)),
+                Val::Px(f32::from(page.root.height)),
+                UiRect::ZERO,
+                UiRect::ZERO,
+                Val::ZERO,
+            )
+        } else {
+            let (base, ..) = style::window_frame();
+            (
+                Val::Px(pane_width_for(top_kind)),
+                Val::Auto,
+                base.padding,
+                base.border,
+                base.row_gap,
+            )
+        };
+        if (
+            pane.width,
+            pane.height,
+            pane.padding,
+            pane.border,
+            pane.row_gap,
+        ) != (width, height, padding, border, gap)
+        {
+            pane.width = width;
+            pane.height = height;
+            pane.padding = padding;
+            pane.border = border;
+            pane.row_gap = gap;
         }
     }
 
     let view = current_view(stack);
 
-    for (_, mut text) in title_q.iter_mut() {
+    for (_, mut text, mut title) in title_q.iter_mut() {
+        let record = page.and_then(|page| {
+            let label = original_title(top_kind)?;
+            super::retail_layout::record_for(page, label.group, label.index)
+        });
+        super::retail_layout::position(&mut title, record);
         let want = view.as_ref().map(root_aware_title).unwrap_or_default();
         if **text != want {
             **text = want;
@@ -1444,8 +1533,35 @@ pub fn update_main_menu(
             row_node.display = Display::Flex;
         }
 
-        let label_owned: String = if is_dynamic(view.kind) {
-            entry_label(view.kind, list_idx, &dynamic).to_string()
+        let record = page.and_then(|page| {
+            let sprite = ROOT_LABEL_SPRITES.get(list_idx).copied().flatten()?;
+            super::retail_layout::record_for(page, WINDOW_LABEL_GROUP, sprite)
+        });
+        let used_layout = row_node.position_type == PositionType::Absolute;
+        super::retail_layout::position(&mut row_node, record);
+        if record.is_some() || used_layout {
+            let (width, height) = record.map_or((Val::Auto, Val::Auto), |row| {
+                (
+                    Val::Px(f32::from(row.width)),
+                    Val::Px(f32::from(row.height)),
+                )
+            });
+            if (
+                row_node.width,
+                row_node.height,
+                row_node.min_width,
+                row_node.min_height,
+            ) != (width, height, Val::Auto, Val::Auto)
+            {
+                row_node.width = width;
+                row_node.height = height;
+                row_node.min_width = Val::Auto;
+                row_node.min_height = Val::Auto;
+            }
+        }
+
+        let label_owned: String = if view.kind == MenuKind::Root || is_dynamic(view.kind) {
+            entry_label_in_scene(view.kind, list_idx, &dynamic, &scene.snapshot).to_string()
         } else {
             entries_for(view.kind, settings.dlss_supported)
                 .get(list_idx)
@@ -1716,6 +1832,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mog_house_replaces_only_the_map_button_and_resets_outside() {
+        let slot = ROOT_ENTRIES
+            .iter()
+            .position(|&label| label == "Map")
+            .unwrap();
+        let mut app = root_menu_app(slot);
+        app.add_systems(Update, sync_original_command_labels.after(update_main_menu));
+        for (room, expected_label, expected_sprite) in [
+            (None, "Map", 23),
+            (
+                Some(kuluu_snapshot::MyRoom {
+                    model: 0,
+                    sub_map: 0,
+                }),
+                ROOT_MOG_HOUSE,
+                MOG_HOUSE_SPRITE,
+            ),
+            (None, "Map", 23),
+        ] {
+            app.world_mut()
+                .resource_mut::<crate::snapshot::SceneState>()
+                .snapshot
+                .myroom = room;
+            app.update();
+            let world = app.world_mut();
+            let (_, label, text) = world
+                .query::<(&MainMenuRow, &RetailMenuLabel, &Text)>()
+                .iter(world)
+                .find(|(row, _, _)| row.slot == slot)
+                .unwrap();
+            assert_eq!(label.index, expected_sprite);
+            assert_eq!(text.0, format!("> {expected_label}"));
+        }
+    }
+
+    #[test]
     fn original_command_art_follows_pages_and_clears_before_submenus() {
         assert_eq!(ROOT_LABEL_SPRITES.len(), ROOT_ENTRIES.len());
         let mut app = root_menu_app(0);
@@ -1833,9 +1985,16 @@ mod tests {
         let config = ROOT_ENTRIES.iter().position(|e| *e == "Config").unwrap();
         assert!(map < ROOT_PAGE_1_LEN && config >= ROOT_PAGE_1_LEN);
 
-        // Flipping from either page lands on the other page's first row.
-        assert_eq!(root_other_page_cursor(0), ROOT_PAGE_1_LEN);
-        assert_eq!(root_other_page_cursor(ROOT_PAGE_1_LEN), 0);
+        assert_eq!(ROOT_ENTRIES.len(), 2 * ROOT_PAGE_1_LEN);
+        for row in 0..ROOT_PAGE_1_LEN {
+            let next = root_other_page_cursor(row);
+            assert_eq!(next, row + ROOT_PAGE_1_LEN);
+            assert_eq!(root_other_page_cursor(next), row);
+            assert_eq!(root_layout_name(row), ROOT_PAGE_LAYOUTS[0]);
+            assert_eq!(root_layout_name(next), ROOT_PAGE_LAYOUTS[1]);
+        }
+        assert!(!ROOT_ENTRIES.contains(&"Graphics"));
+        assert!(!ROOT_ENTRIES.contains(&"Debug"));
     }
 
     fn root_menu_app(cursor: usize) -> App {
@@ -2488,6 +2647,11 @@ mod tests {
         );
         assert!(matches!(rows.first(), Some(MenuRow::Header(_))));
         assert_eq!(root_child_kind("Config"), Some(MenuKind::Config));
+        assert!(rows.contains(&MenuRow::Action(MenuAction::Graphics)));
+        assert_eq!(
+            rows.iter().any(|row| row.label() == "Debug"),
+            cfg!(feature = "debug-menu")
+        );
         assert!(static_entries(MenuKind::Controls).contains(&"Standard"));
         assert_eq!(pane_width_for(MenuKind::Config), GRAPHICS_PANE_WIDTH);
     }

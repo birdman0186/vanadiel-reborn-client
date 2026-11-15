@@ -60,7 +60,7 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let size = frame.logical_size.xy;
     let point = in.uv * size;
     var result = vec4<f32>(0.0);
-    for (var index = 0u; index < 9u; index += 1u) {
+    for (var index = select(0u, 1u, frame.logical_size.z > 0.0); index < 9u; index += 1u) {
         let part = frame.parts[index];
         let rect = part_rect(index, size);
         let offset = point - rect.xy;

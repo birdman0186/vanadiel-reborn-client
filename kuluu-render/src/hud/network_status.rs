@@ -1,4 +1,10 @@
+// .agents/skills/retail-observe/references/original-ui-resources-2026-11-15.md
 use bevy::prelude::*;
+
+use super::retail_layout::{right_clearance, CommandInset, CommandLayout, OriginalBackdrop};
+use super::retail_text::spawn_quads;
+use crate::nameplate_marker::FIRST_GLYPH_CODE;
+use crate::ui_element_atlas::{UiElementAtlas, UiElementDatRoot, UiElementQuad};
 
 use crate::hud::style::{self, theme};
 use crate::snapshot::SceneState;
@@ -34,24 +40,31 @@ pub struct NetSendLabel;
 #[derive(Component)]
 pub struct NetRecvLabel;
 
+#[derive(Component)]
+pub struct FallbackContent;
+
+fn fallback_panel() -> Node {
+    Node {
+        position_type: PositionType::Absolute,
+        top: Val::ZERO,
+        right: Val::ZERO,
+        width: Val::Px(NET_PANEL_W),
+        padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
+        border: UiRect::all(Val::Px(1.0)),
+        flex_direction: FlexDirection::Row,
+        align_items: AlignItems::Center,
+        justify_content: JustifyContent::Center,
+        column_gap: Val::Px(6.0),
+        ..default()
+    }
+}
+
 pub fn spawn_network_status(mut commands: Commands) {
     commands
         .spawn((
             crate::components::InGameEntity,
             NetworkStatusPanel,
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(0.0),
-                right: Val::Px(0.0),
-                width: Val::Px(NET_PANEL_W),
-                padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                column_gap: Val::Px(6.0),
-                ..default()
-            },
+            fallback_panel(),
             super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
@@ -59,11 +72,14 @@ pub fn spawn_network_status(mut commands: Commands) {
             GlobalZIndex(style::WINDOW_Z + 1),
         ))
         .with_children(|p| {
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                ..default()
-            })
+            p.spawn((
+                FallbackContent,
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            ))
             .with_children(|col| {
                 col.spawn((
                     NetSendArrow,
@@ -79,11 +95,14 @@ pub fn spawn_network_status(mut commands: Commands) {
                 ));
             });
 
-            p.spawn(Node {
-                width: Val::Px(PERCENT_BOX_W),
-                justify_content: JustifyContent::FlexEnd,
-                ..default()
-            })
+            p.spawn((
+                FallbackContent,
+                Node {
+                    width: Val::Px(PERCENT_BOX_W),
+                    justify_content: JustifyContent::FlexEnd,
+                    ..default()
+                },
+            ))
             .with_children(|b| {
                 b.spawn((
                     NetPercentLabel,
@@ -93,16 +112,296 @@ pub fn spawn_network_status(mut commands: Commands) {
                 ));
             });
 
-            p.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::FlexStart,
-                ..default()
-            })
+            p.spawn((
+                FallbackContent,
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::FlexStart,
+                    ..default()
+                },
+            ))
             .with_children(|col| {
                 spawn_baud_row(col, "S", NetSendLabel);
                 spawn_baud_row(col, "R", NetRecvLabel);
             });
         });
+}
+
+const NET_LAYOUT: &str = "menu    netstat";
+const METER_GROUP: &str = "menu    netmeter";
+const GLYPH_GROUP: &str = "font    fontshp ";
+const GLYPHS: &[u8] = b"0123456789%SR";
+const METER_PHASES: usize = 4;
+const METER_LEVELS: usize = 3;
+const METER_PARTS: usize = 4;
+const MAX_RATE_CHARS: usize = 12;
+
+#[derive(Component)]
+pub struct NetworkArtwork;
+
+#[derive(Component, Clone, Copy)]
+pub enum NetworkSprite {
+    Arrow(usize),
+    Character { line: usize, column: usize },
+}
+
+struct NetworkAssets {
+    glyphs: Vec<UiElementQuad>,
+    meter: Vec<Vec<UiElementQuad>>,
+}
+
+impl NetworkAssets {
+    fn load(
+        atlas: &mut UiElementAtlas,
+        root: &UiElementDatRoot,
+        images: &mut Assets<Image>,
+    ) -> Option<Self> {
+        let glyphs = GLYPHS
+            .iter()
+            .map(|code| {
+                let index = usize::from(code - FIRST_GLYPH_CODE);
+                let quads = atlas.ensure_element(GLYPH_GROUP, index, root, images)?;
+                let [glyph] = quads.as_slice() else {
+                    return None;
+                };
+                Some(glyph.clone())
+            })
+            .collect::<Option<_>>()?;
+        let meter = (0..METER_PHASES * METER_LEVELS)
+            .map(|index| {
+                atlas
+                    .ensure_element(METER_GROUP, index, root, images)
+                    .filter(|quads| quads.len() == METER_PARTS)
+            })
+            .collect::<Option<_>>()?;
+        Some(Self { glyphs, meter })
+    }
+}
+
+#[derive(Default)]
+pub struct NetworkLayoutCache {
+    source: Option<(Entity, u64)>,
+    assets: Option<NetworkAssets>,
+}
+
+fn spawn_network_sprites(commands: &mut Commands, parent: Entity) {
+    commands.entity(parent).with_children(|children| {
+        let arrows = (0..METER_PARTS).map(NetworkSprite::Arrow);
+        let characters = [4, MAX_RATE_CHARS, MAX_RATE_CHARS]
+            .into_iter()
+            .enumerate()
+            .flat_map(|(line, count)| {
+                (0..count).map(move |column| NetworkSprite::Character { line, column })
+            });
+        for sprite in arrows.chain(characters) {
+            children.spawn((
+                sprite,
+                NetworkArtwork,
+                Node {
+                    position_type: PositionType::Absolute,
+                    display: Display::None,
+                    ..default()
+                },
+                ImageNode::default(),
+                Pickable::IGNORE,
+            ));
+        }
+    });
+}
+
+fn meter_frame(health: u8, phase: usize) -> usize {
+    let level = match health {
+        76.. => 0,
+        26..=75 => 1,
+        _ => 2,
+    };
+    level * METER_PHASES + phase
+}
+
+fn network_character<'a>(
+    assets: &'a NetworkAssets,
+    text: &[u8],
+    line: usize,
+    column: usize,
+    width: f32,
+) -> Option<(&'a UiElementQuad, Rect)> {
+    let code = text.get(column)?;
+    let quad = &assets.glyphs[GLYPHS.iter().position(|item| item == code)?];
+    // The retail reference puts the percentage beside the meter and stacks S above R.
+    let (x, y, room) = match line {
+        0 => (21.0, 10.0, 36.0),
+        1 => (58.0, 4.0, width - 60.0),
+        _ => (58.0, 15.0, width - 60.0),
+    };
+    let advance = (room / text.len() as f32).min(8.0).max(0.0);
+    let scale = advance / 8.0;
+    let left = x + column as f32 * advance;
+    let rect = Rect::from_corners(
+        Vec2::new(left, y),
+        Vec2::new(left + quad.rect.width() * scale, y + quad.rect.height()),
+    );
+    Some((quad, rect))
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub fn sync_network_layout(
+    mut commands: Commands,
+    mut atlas: ResMut<UiElementAtlas>,
+    root: Res<UiElementDatRoot>,
+    mut images: ResMut<Assets<Image>>,
+    command_layout: Option<Res<CommandLayout>>,
+    inset: Option<Res<CommandInset>>,
+    scene: Res<SceneState>,
+    time: Res<Time>,
+    mut panel: Query<
+        (Entity, &mut Node),
+        (
+            With<NetworkStatusPanel>,
+            Without<FallbackContent>,
+            Without<NetworkSprite>,
+        ),
+    >,
+    mut fallback: Query<&mut Node, (With<FallbackContent>, Without<NetworkSprite>)>,
+    art: Query<Entity, With<NetworkArtwork>>,
+    mut sprites: Query<(&NetworkSprite, &mut Node, &mut ImageNode)>,
+    mut cache: Local<NetworkLayoutCache>,
+) {
+    let Ok((parent, mut node)) = panel.single_mut() else {
+        return;
+    };
+    let layout = atlas.ensure_layout(NET_LAYOUT, &root);
+    let key = (parent, atlas.generation());
+    if cache.source != Some(key) {
+        cache.source = Some(key);
+        cache.assets = None;
+        for entity in &art {
+            commands.entity(entity).despawn();
+        }
+        commands.entity(parent).remove::<OriginalBackdrop>();
+        let artwork = layout.as_deref().and_then(|page| {
+            if page.root.width == 0 || page.root.height == 0 {
+                return None;
+            }
+            let reference = page
+                .root
+                .resources
+                .iter()
+                .find(|resource| resource.tag == 0)?;
+            let quads = atlas.ensure_element(
+                &reference.group,
+                usize::from(reference.index),
+                &root,
+                &mut images,
+            )?;
+            if quads.is_empty() {
+                return None;
+            }
+            Some((
+                page,
+                quads,
+                NetworkAssets::load(&mut atlas, &root, &mut images)?,
+            ))
+        });
+        if let Some((layout, quads, assets)) = artwork {
+            let backdrop = spawn_quads(&mut commands, parent, quads);
+            commands
+                .entity(backdrop)
+                .insert((NetworkArtwork, ZIndex(-1)));
+            commands.entity(parent).insert(OriginalBackdrop);
+            spawn_network_sprites(&mut commands, parent);
+            *node = Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(f32::from(layout.root.y)),
+                width: Val::Px(f32::from(layout.root.width)),
+                height: Val::Px(f32::from(layout.root.height)),
+                ..default()
+            };
+            cache.assets = Some(assets);
+        } else {
+            *node = fallback_panel();
+        }
+        for mut item in &mut fallback {
+            item.display = if cache.assets.is_some() {
+                Display::None
+            } else {
+                Display::Flex
+            };
+        }
+    }
+    let (Some(assets), Some(layout)) = (&cache.assets, layout) else {
+        return;
+    };
+    let active = command_layout.as_deref().and_then(CommandLayout::page);
+    let first_page = if active.is_none() {
+        atlas.ensure_layout(super::menu::root_layout_name(0), &root)
+    } else {
+        None
+    };
+    let right = active
+        .or(first_page.as_deref())
+        .map_or(0.0, right_clearance)
+        + inset.as_deref().map_or(0.0, CommandInset::extra);
+    if node.right != Val::Px(right) {
+        node.right = Val::Px(right);
+    }
+    let stats = scene.snapshot.net_stats;
+    let percent = stats.send_health.min(stats.recv_health);
+    let lines = [
+        format!("{percent}%"),
+        format!("S {}", stats.send_bps),
+        format!("R {}", stats.recv_bps),
+    ];
+    let phase = (time.elapsed_secs() * METER_PHASES as f32) as usize % METER_PHASES;
+    for (sprite, mut node, mut image) in &mut sprites {
+        let drawing = match *sprite {
+            NetworkSprite::Arrow(index) => {
+                let health = if index % 2 == 0 {
+                    stats.send_health
+                } else {
+                    stats.recv_health
+                };
+                let quad = &assets.meter[meter_frame(health, phase)][index];
+                Some((
+                    quad,
+                    Rect::from_corners(
+                        quad.rect.min + Vec2::X * 2.0,
+                        quad.rect.max + Vec2::X * 2.0,
+                    ),
+                ))
+            }
+            NetworkSprite::Character { line, column } => network_character(
+                assets,
+                lines[line].as_bytes(),
+                line,
+                column,
+                f32::from(layout.root.width),
+            ),
+        };
+        if let Some((quad, rect)) = drawing {
+            let size = rect.size();
+            if (node.display, node.left, node.top, node.width, node.height)
+                != (
+                    Display::Flex,
+                    Val::Px(rect.min.x),
+                    Val::Px(rect.min.y),
+                    Val::Px(size.x),
+                    Val::Px(size.y),
+                )
+            {
+                node.display = Display::Flex;
+                node.left = Val::Px(rect.min.x);
+                node.top = Val::Px(rect.min.y);
+                node.width = Val::Px(size.x);
+                node.height = Val::Px(size.y);
+            }
+            if image.image != quad.image || image.color != quad.color {
+                image.image = quad.image.clone();
+                image.color = quad.color;
+            }
+        } else if node.display != Display::None {
+            node.display = Display::None;
+        }
+    }
 }
 
 const PERCENT_BOX_W: f32 = 36.0;

@@ -107,7 +107,14 @@ pub fn authored_bounds(quads: &[UiElementQuad]) -> Option<Rect> {
     ))
 }
 
-fn spawn_quads(commands: &mut Commands, parent: Entity, quads: Vec<UiElementQuad>) -> Entity {
+#[derive(Component)]
+struct OriginalQuadColor(Color);
+
+pub(super) fn spawn_quads(
+    commands: &mut Commands,
+    parent: Entity,
+    quads: Vec<UiElementQuad>,
+) -> Entity {
     let root = commands
         .spawn((
             Node {
@@ -129,6 +136,7 @@ fn spawn_quads(commands: &mut Commands, parent: Entity, quads: Vec<UiElementQuad
                         height: Val::Px(quad.rect.height()),
                         ..default()
                     },
+                    OriginalQuadColor(quad.color),
                     ImageNode {
                         color: quad.color,
                         ..ImageNode::new(quad.image)
@@ -153,9 +161,14 @@ fn sync_labels(
         Option<&LabelArt>,
         Option<&mut TextColor>,
         Option<&mut Node>,
+        Has<super::menu::MainMenuRow>,
     )>,
 ) {
-    for (entity, label, loaded, color, mut node) in &mut labels {
+    for (entity, label, loaded, color, mut node, is_row) in &mut labels {
+        let fixed_box = is_row
+            && node
+                .as_ref()
+                .is_some_and(|n| n.position_type == PositionType::Absolute);
         if loaded
             .is_some_and(|loaded| loaded.label == *label && loaded.generation == atlas.generation())
             && !dat_root.is_changed()
@@ -166,9 +179,13 @@ fn sync_labels(
             .map(|loaded| loaded.fallback_color)
             .or_else(|| color.as_ref().map(|color| color.0))
             .unwrap_or(Color::WHITE);
-        let fallback_layout = loaded
-            .and_then(|loaded| loaded.fallback_layout)
-            .or_else(|| node.as_ref().map(|node| LabelLayout::read(node)));
+        let fallback_layout = if fixed_box {
+            None
+        } else {
+            loaded
+                .and_then(|loaded| loaded.fallback_layout)
+                .or_else(|| node.as_ref().map(|node| LabelLayout::read(node)))
+        };
         if let Some(loaded) = loaded {
             commands.entity(loaded.root).despawn();
             commands.entity(entity).remove::<LabelArt>();
@@ -177,7 +194,10 @@ fn sync_labels(
                     color.0 = fallback_color;
                 }
             }
-            if let (Some(layout), Some(node)) = (loaded.fallback_layout, node.as_deref_mut()) {
+            if let (Some(layout), Some(node)) = (
+                loaded.fallback_layout.filter(|_| !fixed_box),
+                node.as_deref_mut(),
+            ) {
                 layout.restore(node);
             }
         }
@@ -188,7 +208,7 @@ fn sync_labels(
         let Some(bounds) = authored_bounds(&quads) else {
             continue;
         };
-        if let Some(node) = node.as_deref_mut() {
+        if let Some(node) = node.as_deref_mut().filter(|_| !fixed_box) {
             apply_authored_layout(node, bounds);
         }
         let root = spawn_quads(&mut commands, entity, quads);
@@ -207,11 +227,17 @@ fn sync_cursors(
     mut atlas: ResMut<UiElementAtlas>,
     dat_root: Res<UiElementDatRoot>,
     mut images: ResMut<Assets<Image>>,
-    cursors: Query<(Entity, &RetailMenuCursor, Option<&CursorArt>)>,
+    cursors: Query<(
+        Entity,
+        &RetailMenuCursor,
+        Option<&CursorArt>,
+        Has<LabelArt>,
+        Option<&TextFont>,
+    )>,
 ) {
-    for (entity, cursor, loaded) in &cursors {
+    for (entity, cursor, loaded, has_art_label, font) in &cursors {
         if loaded.is_some_and(|loaded| {
-            loaded.cursor == *cursor && loaded.generation == atlas.generation()
+            has_art_label && loaded.cursor == *cursor && loaded.generation == atlas.generation()
         }) && !dat_root.is_changed()
         {
             continue;
@@ -220,22 +246,66 @@ fn sync_cursors(
             commands.entity(loaded.root).despawn();
             commands.entity(entity).remove::<CursorArt>();
         }
-        if !cursor.visible {
+        if !cursor.visible || !has_art_label {
             continue;
         }
-        let Some(quads) = atlas.ensure_element(cursor.group, cursor.index, &dat_root, &mut images)
-        else {
-            continue;
+        let quads = atlas
+            .ensure_element(cursor.group, cursor.index, &dat_root, &mut images)
+            .filter(|quads| authored_bounds(quads).is_some());
+        let root = if let Some(quads) = quads {
+            spawn_quads(&mut commands, entity, quads)
+        } else {
+            commands
+                .spawn((
+                    Text::new(">"),
+                    font.cloned().unwrap_or_default(),
+                    TextColor(super::style::theme::CURSOR),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        right: Val::Percent(100.0),
+                        top: Val::ZERO,
+                        ..default()
+                    },
+                    ChildOf(entity),
+                    bevy::picking::Pickable::IGNORE,
+                ))
+                .id()
         };
-        if authored_bounds(&quads).is_none() {
-            continue;
-        }
-        let root = spawn_quads(&mut commands, entity, quads);
         commands.entity(entity).insert(CursorArt {
             cursor: *cursor,
             root,
             generation: atlas.generation(),
         });
+    }
+}
+
+// .agents/skills/retail-observe/references/original-ui-resources-2026-11-15.md
+fn apply_command_focus(
+    rows: Query<(&RetailMenuCursor, &LabelArt), Or<(Changed<RetailMenuCursor>, Added<LabelArt>)>>,
+    children: Query<&Children>,
+    mut parts: Query<(&OriginalQuadColor, &mut ImageNode)>,
+) {
+    for (cursor, label) in &rows {
+        let Ok(quads) = children.get(label.root) else {
+            continue;
+        };
+        for child in quads {
+            let Ok((base, mut image)) = parts.get_mut(*child) else {
+                continue;
+            };
+            image.color = if cursor.visible {
+                let color = base.0.to_srgba();
+                let light = color.red.max(color.green).max(color.blue);
+                let (green, blue) = if color.blue > color.red {
+                    (0.654, 0.386)
+                } else {
+                    (0.765, 0.364)
+                };
+                Color::srgba(light, light * green, light * blue, color.alpha)
+            } else {
+                base.0
+            };
+        }
     }
 }
 
@@ -282,12 +352,14 @@ pub struct RetailMenuLabelsPlugin;
 
 impl Plugin for RetailMenuLabelsPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(super::retail_layout::CommandLayoutPlugin);
         app.add_systems(
             PostUpdate,
             (
                 clear_removed_art,
                 sync_labels,
                 sync_cursors,
+                apply_command_focus,
                 hide_fallback_text,
             )
                 .chain()
@@ -466,6 +538,39 @@ mod tests {
         );
         assert_eq!(app.world().get::<Text>(entity).unwrap().0, "Status");
         assert_eq!(*app.world().get::<Node>(entity).unwrap(), node);
+    }
+
+    #[test]
+    fn missing_cursor_sprite_keeps_selection_visible_on_an_art_label() {
+        let mut app = App::new();
+        app.init_resource::<UiElementAtlas>()
+            .init_resource::<UiElementDatRoot>()
+            .init_resource::<Assets<Image>>()
+            .add_systems(Update, sync_cursors);
+        let label_root = app.world_mut().spawn_empty().id();
+        let entity = app
+            .world_mut()
+            .spawn((
+                Text::new("> Status"),
+                LabelArt {
+                    label: RetailMenuLabel::new(WINDOW_LABEL_GROUP, 13),
+                    root: label_root,
+                    fallback_color: Color::WHITE,
+                    fallback_layout: None,
+                    generation: 0,
+                },
+                RetailMenuCursor::command(true),
+            ))
+            .id();
+        app.update();
+        let root = app.world().get::<CursorArt>(entity).unwrap().root;
+        assert_eq!(app.world().get::<Text>(root).unwrap().0, ">");
+        app.update();
+        assert_eq!(app.world().get::<CursorArt>(entity).unwrap().root, root);
+        app.world_mut().entity_mut(entity).remove::<LabelArt>();
+        app.update();
+        assert!(app.world().get::<CursorArt>(entity).is_none());
+        assert!(app.world().get_entity(root).is_err());
     }
 
     #[test]

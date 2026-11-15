@@ -167,24 +167,31 @@ fn root_entry_help(label: &str) -> &'static str {
         "Key Items" => "Check key items.",
         "Equipment" => "Change equipment.",
         "Status" => "Check current status.",
-        "Party" => "Organize your party.",
-        "Search" => "Search for players.",
         "Map" => "Display the map.",
+        menu::ROOT_MOG_HOUSE => "Open the Mog House menu.",
         menu::ROOT_COMMUNICATION => "Communicate with other players.",
-        "Macros" => "Edit macros.",
-        "Graphics" => "Adjust graphics settings.",
         "Config" => "Change the configuration.",
         menu::ROOT_CURRENT_TIME => "Check the current time.",
-        "Debug" => "Toggle debug panels.",
         menu::ROOT_LOG_OUT => "Log out of the game.",
         menu::ROOT_SHUT_DOWN => "Shut down and exit the game.",
+        "Synthesis" | "Party" | "Trade" | "Search" | "Linkshell" | "Region Info" | "Missions"
+        | "Quests" | "View House" | "Bazaar" | "Macros" | "Help Desk" => {
+            "This command is unavailable in Kuluu."
+        }
         _ => "",
     }
 }
 
-fn entry_help(kind: MenuKind, cursor: usize, dynamic: &DynamicMenu) -> String {
+fn entry_help(
+    kind: MenuKind,
+    cursor: usize,
+    dynamic: &DynamicMenu,
+    scene: &kuluu_snapshot::SceneSnapshot,
+) -> String {
     match kind {
-        MenuKind::Root => root_entry_help(menu::entry_label(kind, cursor, dynamic)).to_string(),
+        MenuKind::Root => {
+            root_entry_help(menu::entry_label_in_scene(kind, cursor, dynamic, scene)).to_string()
+        }
         MenuKind::Items | MenuKind::UsableItems => "Select an item.".to_string(),
         MenuKind::Magic => "Select a spell.".to_string(),
         MenuKind::Abilities => "Select an ability.".to_string(),
@@ -320,7 +327,7 @@ pub fn update_menu_help_bar(
                             Some((used, capacity)) => format!("{used}/{capacity}"),
                             None => String::new(),
                         },
-                        hint: entry_help(l.kind, l.cursor, &dynamic),
+                        hint: entry_help(l.kind, l.cursor, &dynamic, &scene.snapshot),
                     },
                 }
             }),
