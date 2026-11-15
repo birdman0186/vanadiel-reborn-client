@@ -111,7 +111,8 @@ use serde::{Deserialize, Serialize};
 // v5: InventoryItem.charges_remaining + next_use_vana_ts (item recast/charges).
 // v4: SceneSnapshot.delivery_box (dedicated delivery screen) + ViewerCommand::DeliveryBox
 // (postcard frames are not self-describing, so any shape change bumps this).
-pub const PROTOCOL_VERSION: u32 = 46;
+// v47 appends the server-confirmed Seek Party state to SceneSnapshot.
+pub const PROTOCOL_VERSION: u32 = 47;
 
 /// Longest countdown `SceneSnapshot::status_icon_expiries` can carry. The
 /// producer rejects anything beyond it as a corrupt 0x063 timestamp, and the HUD
@@ -1020,10 +1021,6 @@ pub struct SceneSnapshot {
     #[serde(default)]
     pub voyage: Option<Voyage>,
 
-    /// The server confirms the party-seeking flag with CONFIG.
-    #[serde(default)]
-    pub seeking_party: Option<bool>,
-
     /// Job-emote unlock bitfield from s2c 0x11A (bit = job id - 1, bit 0 =
     /// WAR); `None` until the server answers a 0x119 request. Gates the
     /// emote-list menu's Job row.
@@ -1055,6 +1052,10 @@ pub struct SceneSnapshot {
     /// `None` is the ordinary home-point-only menu.
     #[serde(default)]
     pub death_menu_offer: Option<DeathMenuOffer>,
+
+    /// The server confirms the party-seeking flag with CONFIG.
+    #[serde(default)]
+    pub seeking_party: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2506,8 +2507,29 @@ mod tests {
     }
 
     #[test]
+    fn party_seek_roundtrips_and_older_json_has_unknown_state() {
+        let mut snapshot = sample_snapshot();
+        snapshot.seeking_party = Some(true);
+        let bytes = postcard::to_allocvec(&snapshot).unwrap();
+        assert_eq!(
+            postcard::from_bytes::<SceneSnapshot>(&bytes)
+                .unwrap()
+                .seeking_party,
+            Some(true)
+        );
+        let mut old = serde_json::to_value(snapshot).unwrap();
+        old.as_object_mut().unwrap().remove("seeking_party");
+        assert_eq!(
+            serde_json::from_value::<SceneSnapshot>(old)
+                .unwrap()
+                .seeking_party,
+            None
+        );
+    }
+
+    #[test]
     fn current_protocol_preserves_transport_and_voyage_fields() {
-        const VERSION: u32 = 46;
+        const VERSION: u32 = 47;
         const STAMP: u32 = 0x1200_3400;
         assert_eq!(PROTOCOL_VERSION, VERSION);
         let mut snapshot = sample_snapshot();
@@ -2861,12 +2883,13 @@ mod tests {
             "check_message",
             "widescan",
             "death_menu_offer",
+            "seeking_party",
         ];
         want.sort();
         assert_eq!(got, want, "SceneSnapshot fields changed: additive-only, update this pin deliberately and rebuild relay consumers together");
     }
 
-    const SNAPSHOT_DEFAULT_POSTCARD_HEX: &str = "0000000000000000000000000000000019190000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    const SNAPSHOT_DEFAULT_POSTCARD_HEX: &str = "000000000000000000000000000000001919000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 
     /// Postcard is positional, not self-describing: field ORDER and TYPES are
     /// the wire format. Any reorder/retype (and any append) changes these

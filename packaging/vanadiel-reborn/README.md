@@ -305,6 +305,9 @@ The Commands and Party headings have extra clearance for the new typeface.
 | Mog House, Current Time, Shut Down, Log Out | Keeps the existing context or direct action. |
 | Synthesis, Trade, Search, Linkshell, Region Info, Missions, Quests, View House, Bazaar, Macros, Help Desk | The Commands entry still lacks its complete retail workflow. |
 
+Kuluu relay peers that exchange serialized snapshots require protocol 47 on both ends.
+The LandSandBoat game protocol keeps its existing version.
+
 Other Party management commands remain unavailable. The English `prty1`, `prty2`, `prty3`
 and `prty7` records supply row positions for solo, member, leader and allied-leader layouts.
 Check the allied-leader choice against live retail. The Square Enix Windows manual describes
