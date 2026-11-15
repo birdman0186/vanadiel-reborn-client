@@ -325,7 +325,18 @@ pub(super) fn confirm_menu_at_cursor(
         push_system_chat_line(scene_state, format!("[menu] {kind:?} list is empty"));
         return None;
     }
-    let label = kuluu_render::hud::menu::entry_label(kind, cursor, dynamic);
+    let label =
+        kuluu_render::hud::menu::entry_label_in_scene(kind, cursor, dynamic, &scene_state.snapshot);
+    if kind == MenuKind::Root && label == kuluu_render::hud::menu::ROOT_MOG_HOUSE {
+        if let Err(err) = cmd_tx.try_send(AgentCommand::OpenMogMenu) {
+            push_system_chat_line(
+                scene_state,
+                format!("[menu] Could not open Mog House: {err}"),
+            );
+            return None;
+        }
+        return Some(InputMode::World);
+    }
     if let MenuKind::ItemDropConfirm {
         container,
         index,
@@ -1009,12 +1020,12 @@ mod menu_key_tests {
         minimap_state: MinimapState,
         change_map_catalog: ChangeMapCatalog,
         cmd_tx: Sender<AgentCommand>,
-        _cmd_rx: tokio::sync::mpsc::Receiver<AgentCommand>,
+        cmd_rx: tokio::sync::mpsc::Receiver<AgentCommand>,
     }
 
     impl Harness {
         fn new() -> Self {
-            let (cmd_tx, _cmd_rx) = tokio::sync::mpsc::channel(8);
+            let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(8);
             Self {
                 bindings: Bindings::default(),
                 scene_state: SceneState::default(),
@@ -1041,7 +1052,7 @@ mod menu_key_tests {
                 minimap_state: MinimapState::default(),
                 change_map_catalog: ChangeMapCatalog::default(),
                 cmd_tx,
-                _cmd_rx,
+                cmd_rx,
             }
         }
 
@@ -1120,6 +1131,44 @@ mod menu_key_tests {
             key(&Key::ArrowRight, KeyCode::ArrowRight, &mut stack),
             root_other_page_cursor(0)
         );
+    }
+
+    #[test]
+    fn last_root_row_opens_mog_menu_inside_and_map_outside() {
+        let mut harness = Harness::new();
+        let mut world = marker_world();
+        let slot = kuluu_render::hud::menu::root_entries()
+            .iter()
+            .position(|&s| s == "Map")
+            .unwrap();
+        for room in [
+            Some(kuluu_snapshot::MyRoom {
+                model: 0,
+                sub_map: 0,
+            }),
+            None,
+        ] {
+            harness.scene_state.snapshot.myroom = room;
+            let mut stack = MenuStack::root();
+            stack.current_mut().unwrap().cursor = slot;
+            let next = harness.key(
+                &Key::Enter,
+                KeyCode::Enter,
+                &mut stack,
+                world.resource_mut(),
+            );
+            if room.is_some() {
+                assert!(matches!(next, Some(InputMode::World)));
+                assert_eq!(
+                    harness.cmd_rx.try_recv().unwrap(),
+                    AgentCommand::OpenMogMenu
+                );
+            } else {
+                assert!(next.is_none());
+                assert_eq!(stack.current().unwrap().kind, MenuKind::Map);
+                assert!(harness.cmd_rx.try_recv().is_err());
+            }
+        }
     }
 
     #[test]
