@@ -8,9 +8,12 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, T
 use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot, ScreenshotCaptured};
 use bevy::winit::WinitPlugin;
 use kuluu_render::graphics_settings::GraphicsSettings;
+use kuluu_render::hud::classic_status::{update_classic_status_system, ClassicGaugeRow};
+use kuluu_render::hud::panel_column::layout_panel_column_system;
 use kuluu_render::hud::party_frame::{
     spawn_party_frames, update_party_frame_system, PartyFrameSettings, PartyRowTarget,
 };
+use kuluu_render::ui_font::{apply_ui_font, load_ui_font, UiFont};
 use kuluu_render::{nameplate_color::NameColorTable, scene::Target, snapshot::SceneState};
 use kuluu_snapshot::{PartyMember, SceneSnapshot};
 
@@ -48,8 +51,25 @@ fn main() {
         .init_resource::<NameColorTable>()
         .init_resource::<Target>()
         .init_resource::<SceneState>()
-        .add_systems(Startup, (setup, spawn_party_frames))
-        .add_systems(Update, (drive, update_party_frame_system).chain())
+        .init_resource::<UiFont>()
+        .add_systems(Startup, (setup, spawn_party_frames, load_ui_font))
+        .add_systems(
+            Update,
+            (
+                drive,
+                update_party_frame_system,
+                update_classic_status_system,
+            )
+                .chain(),
+        )
+        .add_systems(
+            PostUpdate,
+            layout_panel_column_system.after(bevy::ui::UiSystems::Layout),
+        )
+        .add_systems(
+            PostUpdate,
+            apply_ui_font.before(bevy::ui::UiSystems::Content),
+        )
         .run();
 }
 
@@ -116,7 +136,7 @@ fn fixture(party: bool) -> SceneSnapshot {
             mp: if party { 456 } else { 0 },
             tp: 1000,
             hp_pct: if name == "Lowhealth" { 5 } else { 100 },
-            mp_pct: 50,
+            mp_pct: if party { 50 } else { 0 },
             zone_no,
             main_job: 0,
             main_job_lv: 0,
@@ -151,22 +171,22 @@ fn drive(
     target: Res<CaptureTarget>,
     text: Query<(Entity, &Text, &ComputedNode, &UiGlobalTransform)>,
     parents: Query<&ChildOf>,
-    rows: Query<(), With<PartyRowTarget>>,
+    rows: Query<(), Or<(With<PartyRowTarget>, With<ClassicGaugeRow>)>>,
     capturing: Query<(), With<Capturing>>,
     mut exit: MessageWriter<AppExit>,
 ) {
     let case = *frame / CASE_FRAMES;
     let step = *frame % CASE_FRAMES;
     *frame += 1;
-    if case as usize >= CASE_SCALES.len() {
+    if case as usize >= CASE_SCALES.len() * 2 {
         if capturing.is_empty() {
             exit.write(AppExit::Success);
         }
         return;
     }
     if step == 0 {
-        scale.0 = CASE_SCALES[case as usize];
-        state.snapshot = fixture(case != 0);
+        scale.0 = CASE_SCALES[case as usize % CASE_SCALES.len()];
+        state.snapshot = fixture(case as usize >= CASE_SCALES.len());
         state.dirty = true;
     }
     if step != SETTLE_FRAMES {
@@ -192,9 +212,15 @@ fn drive(
         "production party text must have computed bounds"
     );
     assert!(
-        bounds.iter().any(|(_, value, _)| value == "New"),
-        "activity marker must render"
+        !bounds.iter().any(|(_, value, _)| value == "New"),
+        "classic entries must omit custom activity text"
     );
+    for label in ["HP", "MP", "TP"] {
+        assert!(
+            bounds.iter().any(|(_, value, _)| value == label),
+            "self gauge label must render: {label}"
+        );
+    }
     for (index, (row, label, rect)) in bounds.iter().enumerate() {
         for (other_row, other_label, other_rect) in &bounds[index + 1..] {
             if row == other_row {
@@ -206,7 +232,12 @@ fn drive(
             }
         }
     }
-    let name = format!("party-frame-{}.png", (scale.0 * 100.0) as u32);
+    let mode = if case as usize >= CASE_SCALES.len() {
+        "party"
+    } else {
+        "solo"
+    };
+    let name = format!("classic-{mode}-{}.png", (scale.0 * 100.0) as u32);
     commands
         .spawn(Screenshot::image(target.image.clone()))
         .observe(save_to_disk(target.directory.join(name)))
