@@ -24,7 +24,7 @@ pub fn apply_ui_font(ui_font: Res<UiFont>, mut q: Query<&mut TextFont, Added<Tex
     }
     let ours = FontSource::Handle(ui_font.0.clone());
     for mut text_font in &mut q {
-        if text_font.font != ours {
+        if text_font.font == FontSource::default() {
             text_font.font = ours.clone();
         }
     }

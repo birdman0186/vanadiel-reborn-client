@@ -330,7 +330,13 @@ impl Plugin for RetailFramePlugin {
             .init_resource::<FrameCache>()
             .add_systems(
                 PostUpdate,
+                super::equipment_screen::position_equipment_cells
+                    .before(bevy::ui::UiSystems::Prepare),
+            )
+            .add_systems(
+                PostUpdate,
                 update_frames
+                    .run_if(not(resource_exists::<super::astral::AstralCobalt>))
                     .in_set(OriginalFrameUpdate)
                     .before(bevy::ui::UiSystems::Prepare),
             )

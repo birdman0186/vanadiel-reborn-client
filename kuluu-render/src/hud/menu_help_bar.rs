@@ -65,6 +65,7 @@ pub fn spawn_menu_help_bar(mut commands: Commands) {
                 display: Display::None,
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
             GlobalZIndex(style::WINDOW_Z),
@@ -193,6 +194,14 @@ fn entry_help(
             root_entry_help(menu::entry_label_in_scene(kind, cursor, dynamic, scene)).to_string()
         }
         MenuKind::Items | MenuKind::UsableItems => "Select an item.".to_string(),
+        MenuKind::Party => match menu::party_option(scene, cursor) {
+            Some("Seek Party") => "Look for a party.",
+            Some("Play Solo") => "Stop looking for a party.",
+            Some("Member List") => "View your party members.",
+            _ => "This command is unavailable.",
+        }
+        .to_string(),
+        MenuKind::PartyMembers => "View your party members.".into(),
         MenuKind::Magic => "Select a spell.".to_string(),
         MenuKind::Abilities => "Select an ability.".to_string(),
         MenuKind::KeyItems => "Select a key item.".to_string(),

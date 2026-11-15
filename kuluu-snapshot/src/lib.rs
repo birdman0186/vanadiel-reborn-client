@@ -1020,6 +1020,10 @@ pub struct SceneSnapshot {
     #[serde(default)]
     pub voyage: Option<Voyage>,
 
+    /// The server confirms the party-seeking flag with CONFIG.
+    #[serde(default)]
+    pub seeking_party: Option<bool>,
+
     /// Job-emote unlock bitfield from s2c 0x11A (bit = job id - 1, bit 0 =
     /// WAR); `None` until the server answers a 0x119 request. Gates the
     /// emote-list menu's Job row.
@@ -2292,6 +2296,7 @@ mod tests {
             mh_2f_unlocked: None,
             sub_area: None,
             voyage: None,
+            seeking_party: None,
             emote_jobs: None,
             emote_chairs: None,
             check: None,

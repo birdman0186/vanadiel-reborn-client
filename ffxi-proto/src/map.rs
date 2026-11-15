@@ -49,6 +49,7 @@ pub mod c2s {
     // GP_CLI_COMMAND_EMOTE_LIST, vendor/server/src/map/enums/packet_c2s.h.
     // Header-only request for the job-emote/chair unlock flags; answered by
     // s2c 0x11A (vendor/server/src/map/packets/c2s/0x119_emote_list.h).
+    pub const CONFIG: u16 = 0x0DC;
     pub const EMOTE_LIST: u16 = 0x119;
 
     pub const CHAT: u16 = 0x0B5;
@@ -494,6 +495,7 @@ pub mod s2c {
     // GP_SERV_COMMAND_EMOTE_LIST, vendor/server/src/map/enums/packet_s2c.h.
     // Job-emote (u32) + chair (u16) unlock bitfields
     // (vendor/server/src/map/packets/s2c/0x11a_emote_list.h).
+    pub const CONFIG: u16 = 0x0B4;
     pub const EMOTE_LIST: u16 = 0x11A;
 
     pub const ITEM_MAX: u16 = 0x01C;

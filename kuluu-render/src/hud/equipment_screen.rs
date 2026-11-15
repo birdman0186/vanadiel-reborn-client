@@ -112,6 +112,13 @@ fn screen_state(mode: &InputMode) -> ScreenState {
     }
 }
 
+/// Install the same production screen systems in the standalone offscreen viewer.
+#[doc(hidden)]
+pub fn install_equipment_screen_capture(app: &mut App) {
+    app.add_systems(Startup, spawn_equipment_screen)
+        .add_systems(Update, update_equipment_screen);
+}
+
 pub(crate) fn spawn_equipment_screen(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let placeholder = transparent_placeholder(&mut images);
 
@@ -184,30 +191,32 @@ pub(crate) fn spawn_equipment_screen(mut commands: Commands, mut images: ResMut<
             });
 
             // Center: title + 4x4 equipment-slot icon grid.
-            let (n, bg, bd, frame) = framed_box();
-            root.spawn((n, bg, bd, frame)).with_children(|p| {
-                spawn_text(p, EquipRole::Header, 14.0, theme::TITLE);
-                p.spawn(Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(4.0),
-                    margin: UiRect::top(Val::Px(4.0)),
-                    ..default()
-                })
-                .with_children(|grid| {
-                    for row in EQUIP_GRID.iter() {
-                        grid.spawn(Node {
-                            flex_direction: FlexDirection::Row,
-                            column_gap: Val::Px(4.0),
+            let (mut n, bg, bd, frame) = framed_box();
+            n.width = Val::Px(182.0);
+            n.height = Val::Px(190.0);
+            n.padding = UiRect::ZERO;
+            n.border = UiRect::ZERO;
+            root.spawn((n, bg, bd, frame, super::astral::EquipmentHeader))
+                .with_children(|p| {
+                    p.spawn((
+                        EquipText(EquipRole::Header),
+                        Text::new(""),
+                        text_font(13.0),
+                        TextColor(theme::TITLE),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            bottom: Val::Px(6.0),
+                            left: Val::Px(8.0),
+                            right: Val::Px(8.0),
                             ..default()
-                        })
-                        .with_children(|line| {
-                            for &slot in row.iter() {
-                                spawn_cell(line, slot, placeholder.clone());
-                            }
-                        });
+                        },
+                    ));
+                    for row in EQUIP_GRID {
+                        for slot in row {
+                            spawn_cell(p, slot, placeholder.clone());
+                        }
                     }
                 });
-            });
 
             // Right: equippable-item storage list (only shown while picking).
             let (mut n, bg, bd, frame) = framed_box();
@@ -242,6 +251,58 @@ fn spawn_row(p: &mut ChildSpawnerCommands, role: EquipRole, size: f32, color: Co
             ..default()
         },
     ));
+}
+
+// ROM/119/51.DAT, menu equip. Resolve frame ids in visual order because the records are column-major.
+pub(super) fn position_equipment_cells(
+    mut atlas: ResMut<crate::ui_element_atlas::UiElementAtlas>,
+    root: Res<crate::ui_element_atlas::UiElementDatRoot>,
+    mut panels: Query<
+        &mut Node,
+        (
+            With<super::astral::EquipmentHeader>,
+            Without<EquipCellFrame>,
+        ),
+    >,
+    mut cells: Query<(&EquipCellFrame, &mut Node)>,
+    mut last: Local<Option<(u64, Entity)>>,
+    screen: Query<Entity, With<EquipScreenRoot>>,
+) {
+    let Ok(entity) = screen.single() else { return };
+    let page = atlas.ensure_layout("menu    equip", &root);
+    let key = (atlas.generation(), entity);
+    if *last == Some(key) {
+        return;
+    }
+    *last = Some(key);
+    if let Some(page) = &page {
+        for mut node in &mut panels {
+            node.width = Val::Px(f32::from(page.root.width));
+            node.height = Val::Px(f32::from(page.root.height));
+        }
+    }
+    for (cell, mut node) in &mut cells {
+        let (r, c) = slot_to_cell(cell.0);
+        let record = page.as_ref().and_then(|layout| {
+            super::retail_layout::record_for(layout, "menu    frames", 40 + 4 * r + c)
+        });
+        let (x, y, w, h) = record.map_or(
+            (24. + 34. * c as f32, 11. + 34. * r as f32, 32., 32.),
+            |rec| {
+                (
+                    f32::from(rec.x),
+                    f32::from(rec.y),
+                    f32::from(rec.width),
+                    f32::from(rec.height),
+                )
+            },
+        );
+        node.position_type = PositionType::Absolute;
+        node.left = Val::Px(x);
+        node.top = Val::Px(y);
+        node.width = Val::Px(w);
+        node.height = Val::Px(h);
+    }
 }
 
 fn spawn_cell(p: &mut ChildSpawnerCommands, slot: EquipmentIndex, placeholder: Handle<Image>) {
@@ -373,6 +434,12 @@ pub(crate) fn update_equipment_screen(
             storage_cursor,
             storage_start,
         );
+        let visible = match tag.0 {
+            EquipRole::CellLabel(slot) if !visible => equipped(slot)
+                .and_then(|id| icon_cache.ensure(id, &dat_root, &mut images))
+                .is_none(),
+            _ => visible,
+        };
         let display = if visible {
             Display::Flex
         } else {
@@ -480,10 +547,10 @@ fn role_value(
             let s = match me {
                 Some(m) => match snap.stats.as_ref().filter(|s| s.hp_max > 0) {
                     Some(st) => format!(
-                        "HP {}/{}  MP {}/{}  TP {}",
+                        "HP {}/{}   MP {}/{}   TP {}",
                         m.hp, st.hp_max, m.mp, st.mp_max, m.tp
                     ),
-                    None => format!("HP {}   MP {}   TP {}", m.hp, m.mp, m.tp),
+                    None => format!("HP {}   MP {}   TP {}", m.hp, m.mp, m.tp),
                 },
                 None => "HP —   MP —   TP —".to_string(),
             };

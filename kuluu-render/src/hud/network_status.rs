@@ -248,6 +248,7 @@ fn network_character<'a>(
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn sync_network_layout(
+    astral: Option<Res<super::astral::AstralCobalt>>,
     mut commands: Commands,
     mut atlas: ResMut<UiElementAtlas>,
     root: Res<UiElementDatRoot>,
@@ -308,11 +309,13 @@ pub fn sync_network_layout(
             ))
         });
         if let Some((layout, quads, assets)) = artwork {
-            let backdrop = spawn_quads(&mut commands, parent, quads);
-            commands
-                .entity(backdrop)
-                .insert((NetworkArtwork, ZIndex(-1)));
-            commands.entity(parent).insert(OriginalBackdrop);
+            if astral.is_none() {
+                let backdrop = spawn_quads(&mut commands, parent, quads);
+                commands
+                    .entity(backdrop)
+                    .insert((NetworkArtwork, ZIndex(-1)));
+                commands.entity(parent).insert(OriginalBackdrop);
+            }
             spawn_network_sprites(&mut commands, parent);
             *node = Node {
                 position_type: PositionType::Absolute,

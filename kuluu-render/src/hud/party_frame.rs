@@ -411,6 +411,7 @@ pub fn spawn_party_frames(mut commands: Commands) {
                     },
                     ..default()
                 },
+                super::retail_frame::RetailWindow,
                 BackgroundColor(theme::FRAME_BG),
                 BorderColor::all(theme::FRAME_EDGE),
             ))
@@ -504,6 +505,7 @@ fn spawn_ui_settings_panel(mut commands: Commands) {
                 display: Display::None,
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::CURSOR),
         ))

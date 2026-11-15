@@ -110,6 +110,7 @@ const MENU_TITLE_GROUP: &str = "menu    comwin";
 pub(super) fn original_title(kind: MenuKind) -> Option<RetailMenuLabel> {
     let index = match kind {
         MenuKind::Root => 16,
+        MenuKind::Party => 30,
         MenuKind::Status => 17,
         MenuKind::Magic => 18,
         MenuKind::Abilities => 20,
@@ -173,6 +174,7 @@ pub struct DynamicMenuRow {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DynamicMenuAction {
+    PartyEntry,
     CastSpell {
         spell_id: u16,
     },
@@ -537,10 +539,104 @@ const MAX_ENTRY_COUNT: usize = {
     }
 };
 
+pub fn party_layout(scene: &kuluu_snapshot::SceneSnapshot) -> &'static str {
+    let me = scene
+        .party
+        .iter()
+        .find(|m| Some(m.id) == scene.self_char_id && m.party_no < ffxi_proto::decode::NO_PARTY);
+    match me {
+        None => "menu    prty1",
+        Some(me)
+            if me.is_party_leader
+                && scene.party.iter().any(|m| {
+                    m.party_no < ffxi_proto::decode::NO_PARTY && m.party_no != me.party_no
+                }) =>
+        {
+            "menu    prty7"
+        }
+        Some(me) if me.is_party_leader => "menu    prty3",
+        Some(_) => "menu    prty2",
+    }
+}
+
+// ROM/119/51.DAT, prty1, prty2, prty3 and prty7, in visible row order.
+fn party_options(scene: &kuluu_snapshot::SceneSnapshot) -> &'static [&'static str] {
+    const SOLO: &[&str] = &[
+        "Seek Party",
+        "Find Member",
+        "Request",
+        "View Request",
+        "Autogroup",
+        "Languages",
+        "Alarm Type",
+    ];
+    const MEMBER: &[&str] = &[
+        "Member List",
+        "Request",
+        "View Request",
+        "Rearrange",
+        "Focus",
+        "Distribution",
+        "Disband",
+    ];
+    const LEADER: &[&str] = &[
+        "Find Member",
+        "Member List",
+        "Request",
+        "View Request",
+        "Distribution",
+        "Chg. Leader",
+        "Rearrange",
+        "Focus",
+        "Rmv. Member",
+        "Disband",
+        "Alliance",
+        "Level Sync",
+    ];
+    const ALLIED: &[&str] = &[
+        "Find Member",
+        "Member List",
+        "Request",
+        "View Request",
+        "Distribution",
+        "Chg. Leader",
+        "Rearrange",
+        "Focus",
+        "Rmv. Member",
+        "Disband",
+        "Dissolve",
+        "Level Sync",
+    ];
+    match party_layout(scene) {
+        "menu    prty2" => MEMBER,
+        "menu    prty3" => LEADER,
+        "menu    prty7" => ALLIED,
+        _ => SOLO,
+    }
+}
+
+pub fn party_option(scene: &kuluu_snapshot::SceneSnapshot, cursor: usize) -> Option<&'static str> {
+    let label = *party_options(scene).get(cursor)?;
+    Some(
+        if label == "Seek Party" && scene.seeking_party == Some(true) {
+            "Play Solo"
+        } else {
+            label
+        },
+    )
+}
+
+pub fn party_option_enabled(label: &str, scene: &kuluu_snapshot::SceneSnapshot) -> bool {
+    label == "Member List"
+        || (matches!(label, "Seek Party" | "Play Solo") && scene.seeking_party.is_some())
+}
+
 pub fn is_dynamic(kind: MenuKind) -> bool {
     matches!(
         kind,
         MenuKind::Magic
+            | MenuKind::Party
+            | MenuKind::PartyMembers
             | MenuKind::Abilities
             | MenuKind::Items
             | MenuKind::KeyItems
@@ -662,6 +758,7 @@ pub fn entries_for(kind: MenuKind, dlss_supported: bool) -> Vec<&'static str> {
 
 fn static_entries(kind: MenuKind) -> &'static [&'static str] {
     match kind {
+        MenuKind::Party | MenuKind::PartyMembers => &[],
         MenuKind::Root => ROOT_ENTRIES,
         MenuKind::Config => &[],
         MenuKind::Controls => CONTROLS_ENTRIES,
@@ -692,6 +789,8 @@ fn static_entries(kind: MenuKind) -> &'static [&'static str] {
 
 pub fn menu_title(kind: MenuKind) -> &'static str {
     match kind {
+        MenuKind::Party => "Party",
+        MenuKind::PartyMembers => "Member List",
         MenuKind::Root => "Commands",
         MenuKind::Config => "Config",
         MenuKind::Controls => "Controls",
@@ -718,6 +817,7 @@ pub fn menu_title(kind: MenuKind) -> &'static str {
 /// Map uses its own screen. Direct actions and unavailable commands have no preview.
 pub fn root_child_kind(label: &str) -> Option<MenuKind> {
     Some(match label {
+        "Party" => MenuKind::Party,
         "Magic" => MenuKind::Magic,
         "Abilities" => MenuKind::Abilities,
         "Items" => MenuKind::Items,
@@ -793,6 +893,7 @@ fn text_nowrap() -> TextLayout {
 pub struct MainMenuPane;
 
 pub fn sync_original_command_labels(
+    astral: Option<Res<super::astral::AstralCobalt>>,
     mut commands: Commands,
     mode: Res<InputMode>,
     scene: Res<crate::snapshot::SceneState>,
@@ -804,6 +905,9 @@ pub fn sync_original_command_labels(
     )>,
     titles: Query<(Entity, Option<&RetailMenuLabel>), With<MainMenuTitle>>,
 ) {
+    if astral.is_some() {
+        return;
+    }
     let desired_title = match &*mode {
         InputMode::Menu(stack) => stack.current().and_then(|level| original_title(level.kind)),
         _ => None,
@@ -921,6 +1025,30 @@ pub fn refresh_dynamic_menu_rows(
     };
     let snap = &scene.snapshot;
     let rows: Vec<DynamicMenuRow> = match kind {
+        MenuKind::Party => (0..party_options(snap).len())
+            .filter_map(|idx| party_option(snap, idx))
+            .map(|label| DynamicMenuRow {
+                label: label.into(),
+                action: DynamicMenuAction::PartyEntry,
+            })
+            .collect(),
+        MenuKind::PartyMembers => {
+            let number = snap
+                .party
+                .iter()
+                .find(|m| Some(m.id) == snap.self_char_id)
+                .map(|m| m.party_no);
+            snap.party
+                .iter()
+                .filter(|m| Some(m.party_no) == number && m.party_no < ffxi_proto::decode::NO_PARTY)
+                .filter_map(|m| {
+                    m.name.as_ref().map(|name| DynamicMenuRow {
+                        label: name.clone(),
+                        action: DynamicMenuAction::PartyEntry,
+                    })
+                })
+                .collect()
+        }
         MenuKind::Magic => snap
             .spells_known
             .iter()
@@ -1061,7 +1189,11 @@ fn order_dynamic_rows(kind: MenuKind, auto_sort: bool, rows: &mut [DynamicMenuRo
         // tables together (whether retail sections match the tables is an
         // open question, bead kuluu-h7x retail_unknowns). Emotes keep the
         // scraped-table (id) order.
-        MenuKind::ItemAction { .. } | MenuKind::KeyItems | MenuKind::EmoteList => {}
+        MenuKind::Party
+        | MenuKind::PartyMembers
+        | MenuKind::ItemAction { .. }
+        | MenuKind::KeyItems
+        | MenuKind::EmoteList => {}
         _ => rows.sort_by(|a, b| a.label.cmp(&b.label)),
     }
 }
@@ -1383,6 +1515,7 @@ pub fn update_main_menu(
     dynamic: Res<DynamicMenu>,
     original: Option<Res<super::retail_layout::CommandLayout>>,
     inset: Option<Res<super::retail_layout::CommandInset>>,
+    astral: Option<Res<super::astral::AstralCobalt>>,
     mut menu_q: Query<
         &mut Node,
         (
@@ -1443,19 +1576,24 @@ pub fn update_main_menu(
         node.display = Display::Flex;
     }
     let page = original.as_deref().and_then(|layout| layout.page());
-    let (top, right) = page.map_or(
+    // The text heading needs its own band above the original 16-pixel buttons.
+    let heading_inset = if astral.is_some() && page.is_some() {
+        12.0
+    } else {
+        0.0
+    };
+    let fallback_right = if astral.is_some() {
+        style::PANEL_COLUMN_RIGHT_PX
+    } else {
+        style::PANEL_WIDTH_PX + style::PANEL_COLUMN_RIGHT_PX + style::PANEL_COLUMN_GAP_PX
+    };
+    let (top, right) = page.map_or((48.0, fallback_right), |page| {
         (
-            48.0,
-            style::PANEL_WIDTH_PX + style::PANEL_COLUMN_RIGHT_PX + style::PANEL_COLUMN_GAP_PX,
-        ),
-        |page| {
-            (
-                f32::from(page.root.y),
-                super::retail_layout::right_clearance(page)
-                    + inset.as_deref().map_or(0.0, |inset| inset.extra()),
-            )
-        },
-    );
+            f32::from(page.root.y),
+            super::retail_layout::right_clearance(page)
+                + inset.as_deref().map_or(0.0, |inset| inset.extra()),
+        )
+    });
     if (node.top, node.right) != (Val::Px(top), Val::Px(right)) {
         node.top = Val::Px(top);
         node.right = Val::Px(right);
@@ -1464,7 +1602,7 @@ pub fn update_main_menu(
         let (width, height, padding, border, gap) = if let Some(page) = page {
             (
                 Val::Px(f32::from(page.root.width)),
-                Val::Px(f32::from(page.root.height)),
+                Val::Px(f32::from(page.root.height) + heading_inset),
                 UiRect::ZERO,
                 UiRect::ZERO,
                 Val::ZERO,
@@ -1503,7 +1641,16 @@ pub fn update_main_menu(
             super::retail_layout::record_for(page, label.group, label.index)
         });
         super::retail_layout::position(&mut title, record);
-        let want = view.as_ref().map(root_aware_title).unwrap_or_default();
+        if heading_inset > 0.0 {
+            title.position_type = PositionType::Absolute;
+            title.top = Val::Px(2.0);
+            title.left = Val::Px(8.0);
+        }
+        let want = if astral.is_some() && top_kind == MenuKind::Root {
+            "Commands".into()
+        } else {
+            view.as_ref().map(root_aware_title).unwrap_or_default()
+        };
         if **text != want {
             **text = want;
         }
@@ -1534,11 +1681,20 @@ pub fn update_main_menu(
         }
 
         let record = page.and_then(|page| {
+            if view.kind == MenuKind::Party {
+                return super::retail_layout::party_record(page, list_idx);
+            }
             let sprite = ROOT_LABEL_SPRITES.get(list_idx).copied().flatten()?;
             super::retail_layout::record_for(page, WINDOW_LABEL_GROUP, sprite)
         });
         let used_layout = row_node.position_type == PositionType::Absolute;
         super::retail_layout::position(&mut row_node, record);
+        if let Some(rec) = record.filter(|_| heading_inset > 0.0) {
+            row_node.top = Val::Px(f32::from(rec.y) + heading_inset);
+        }
+        if astral.is_some() {
+            row_node.padding.left = Val::Px(12.0);
+        }
         if record.is_some() || used_layout {
             let (width, height) = record.map_or((Val::Auto, Val::Auto), |row| {
                 (
@@ -1588,9 +1744,33 @@ pub fn update_main_menu(
 
         let is_cursor = view.cursor == list_idx;
         let (want, want_color, want_bg) = if is_cursor {
-            (format!("> {body}"), theme::CURSOR, Color::NONE)
+            (
+                if astral.is_some() {
+                    body.clone()
+                } else {
+                    format!("> {body}")
+                },
+                theme::CURSOR,
+                Color::NONE,
+            )
         } else {
-            (format!("  {body}"), theme::TEXT, Color::NONE)
+            (
+                if astral.is_some() {
+                    body
+                } else {
+                    format!("  {body}")
+                },
+                theme::TEXT,
+                Color::NONE,
+            )
+        };
+        let want_color = if view.kind == MenuKind::Party
+            && !party_option_enabled(&label_owned, &scene.snapshot)
+            && !is_cursor
+        {
+            theme::MUTED
+        } else {
+            want_color
         };
         if **text != want {
             **text = want;
@@ -2342,6 +2522,29 @@ mod tests {
             item_action_rows(&snap, c::LOC_MOGSAFE, 1, 999).is_empty(),
             "item id mismatch means the slot changed under the menu"
         );
+    }
+
+    #[test]
+    fn party_rows_follow_self_membership_and_leader_flags() {
+        let mut scene = crate::snapshot::SceneState::default().snapshot;
+        let mut me = war_party_member(7);
+        scene.self_char_id = Some(me.id);
+        me.party_no = ffxi_proto::decode::NO_PARTY;
+        scene.party = vec![me];
+        assert_eq!(party_option(&scene, 0), Some("Seek Party"));
+        assert!(!party_option_enabled("Seek Party", &scene));
+        scene.seeking_party = Some(true);
+        assert_eq!(party_option(&scene, 0), Some("Play Solo"));
+        scene.party[0].party_no = 0;
+        scene.party[0].is_party_leader = false;
+        assert_eq!(party_option(&scene, 0), Some("Member List"));
+        scene.party[0].is_party_leader = true;
+        assert_eq!(party_option(&scene, 0), Some("Find Member"));
+        assert_eq!(party_option(&scene, 10), Some("Alliance"));
+        let mut ally = war_party_member(8);
+        ally.party_no = 1;
+        scene.party.push(ally);
+        assert_eq!(party_option(&scene, 10), Some("Dissolve"));
     }
 
     fn war_party_member(id: u32) -> kuluu_snapshot::PartyMember {

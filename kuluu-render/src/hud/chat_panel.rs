@@ -319,6 +319,7 @@ fn spawn_auto_switch_toggle(p: &mut ChildSpawnerCommands) {
             margin: UiRect::left(Val::Px(6.0)),
             ..default()
         },
+        super::retail_frame::RetailWindow,
         BackgroundColor(theme::FRAME_BG),
         BorderColor::all(theme::FRAME_EDGE),
     ))

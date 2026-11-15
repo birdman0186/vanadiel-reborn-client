@@ -27,6 +27,7 @@ pub mod list_view;
 #[cfg(feature = "enhanced-shutdown-counter")]
 pub mod logout_countdown;
 // Depends on `crate::minimap`, which is itself gated off wasm (lib.rs).
+pub mod astral;
 pub mod graphics_debug;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod map_screen;

@@ -622,6 +622,10 @@ pub struct SessionState {
     #[serde(default)]
     pub mh_2f_unlocked: Option<bool>,
 
+    /// The server confirms the party-seeking flag with CONFIG.
+    #[serde(default)]
+    pub seeking_party: Option<bool>,
+
     /// Job-emote unlock bitfield from s2c 0x11A (bit = job id - 1); `None`
     /// until the server answers a 0x119 EMOTE_LIST request.
     #[serde(default)]
@@ -1650,6 +1654,7 @@ impl SessionState {
             } => {
                 self.zone_id = if *to == 0 { None } else { Some(*to) };
 
+                self.seeking_party = None;
                 self.myroom = *myroom;
                 self.mog_zone_flag = *mog_zone_flag;
                 self.sub_area = None;
@@ -2620,6 +2625,9 @@ impl SessionState {
                     changed
                 }
             },
+            AgentEvent::SeekingPartyUpdated { enabled } => {
+                self.seeking_party.replace(*enabled) != Some(*enabled)
+            }
             AgentEvent::EmoteListUpdated {
                 job_bits,
                 chair_bits,
@@ -3005,6 +3013,9 @@ pub enum AgentEvent {
     },
 
     /// s2c 0x11A EMOTE_LIST: job-emote/chair unlock bitfields.
+    SeekingPartyUpdated {
+        enabled: bool,
+    },
     EmoteListUpdated {
         job_bits: u32,
         chair_bits: u16,
@@ -3649,6 +3660,9 @@ pub enum AgentCommand {
     /// c2s 0x119 EMOTE_LIST: header-only request for the job-emote/chair
     /// unlock bitfields (answered by s2c 0x11A).
     RequestEmoteList,
+    SetSeekingParty {
+        enabled: bool,
+    },
 
     ReturnToHomePoint,
 

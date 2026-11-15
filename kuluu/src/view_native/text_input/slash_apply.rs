@@ -782,6 +782,8 @@ pub(super) fn apply_slash_outcome(
         SlashOutcome::OpenMenu(kind) => {
             let label: std::borrow::Cow<'static, str> = match kind {
                 kuluu_render::MenuKind::Magic => "Magic".into(),
+                kuluu_render::MenuKind::Party => "Party".into(),
+                kuluu_render::MenuKind::PartyMembers => "Member List".into(),
                 kuluu_render::MenuKind::Abilities => "Abilities".into(),
                 kuluu_render::MenuKind::Items => "Items".into(),
                 kuluu_render::MenuKind::KeyItems => "Key Items".into(),

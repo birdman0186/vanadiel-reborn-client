@@ -105,6 +105,7 @@ pub fn state_to_snapshot(s: &SessionState) -> wire::SceneSnapshot {
 
         mh_2f_unlocked: s.mh_2f_unlocked,
 
+        seeking_party: s.seeking_party,
         emote_jobs: s.emote_jobs,
         emote_chairs: s.emote_chairs,
 

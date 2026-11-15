@@ -27,18 +27,18 @@ pub const PANEL_COLUMN_GAP_PX: f32 = 8.0;
 pub mod theme {
     use bevy::prelude::Color;
 
-    pub const FRAME_BG: Color = Color::srgba(0.05, 0.07, 0.16, 0.88);
+    pub const FRAME_BG: Color = Color::srgba(0.034, 0.065, 0.14, 0.92);
     // Opaque FRAME_BG for map surfaces only: a translucent backing behind the
     // minimap/map image shimmers where the map texture is transparent, because
     // the alpha composites over the live moving 3D scene as the player walks
     // (kuluu-bi1s.1). Opaque backing = static fill, no edge flash.
     pub const MAP_BACKING: Color = Color::srgb(0.05, 0.07, 0.16);
-    pub const FRAME_EDGE: Color = Color::srgb(0.60, 0.69, 0.85);
-    pub const TITLE: Color = Color::srgb(0.80, 0.89, 1.0);
-    pub const TEXT: Color = Color::srgb(0.91, 0.92, 0.95);
+    pub const FRAME_EDGE: Color = Color::srgb(0.56, 0.64, 0.76);
+    pub const TITLE: Color = Color::srgb(0.96, 0.91, 0.80);
+    pub const TEXT: Color = Color::srgb(0.96, 0.95, 0.91);
     pub const MUTED: Color = Color::srgb(0.58, 0.63, 0.74);
-    pub const CURSOR: Color = Color::srgb(1.0, 0.84, 0.36);
-    pub const CURSOR_BG: Color = Color::srgba(0.20, 0.28, 0.45, 0.65);
+    pub const CURSOR: Color = Color::srgb(0.99, 0.86, 0.60);
+    pub const CURSOR_BG: Color = Color::srgba(0.14, 0.31, 0.54, 0.92);
     pub const CELL_BG: Color = Color::srgba(0.10, 0.13, 0.24, 0.85);
     pub const CELL_EDGE: Color = Color::srgb(0.32, 0.38, 0.52);
     pub const DANGER: Color = Color::srgb(0.95, 0.35, 0.35);

@@ -5274,3 +5274,21 @@ fn battle2_knockbacks_are_none_without_a_level() {
     w.write(0, 1);
     assert!(super::decode_battle2_knockbacks(&w.into_bytes()).is_none());
 }
+
+#[test]
+fn seek_party_only_changes_the_invite_flag() {
+    for (enabled, set_flag) in [(true, 1), (false, 2)] {
+        let bytes = super::codec::build_party_seek(0x1234, enabled);
+        let mut packets = ffxi_proto::framing::walk_sub_packets(&bytes);
+        let packet = packets.next().unwrap().unwrap();
+        assert!(packets.next().is_none());
+        assert_eq!(
+            (packet.opcode, packet.sequence),
+            (ffxi_proto::map::c2s::CONFIG, 0x1234)
+        );
+        let mut expected = [0; 16];
+        expected[0] = 1;
+        expected[12] = set_flag;
+        assert_eq!(packet.data, expected);
+    }
+}

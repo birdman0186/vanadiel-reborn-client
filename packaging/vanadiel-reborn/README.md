@@ -280,3 +280,40 @@ $env:FFXI_DAT_PATH = 'E:\Final Fantasy XI\SquareEnix\FINAL FANTASY XI'
 ```
 
 To compare builds, log out and launch the previous client from its original folder.
+
+## Astral Cobalt client pass
+
+The standalone client draws framed windows in cobalt with a silver rule and gold corners.
+Commands uses a gilded focus edge. Confirming a submenu draws three stars for 0.84 seconds.
+Navigation and server commands take effect as soon as the player confirms.
+Chat keeps its channel colors, scroll position, input and history.
+The separate HP, MP and TP gauges and the party roster read the current scene snapshot.
+An unavailable out-of-zone value displays as two dashes.
+
+The Equipment panel uses the 16 slot locations in the installed English `menu    equip` record.
+The slot frame index is 40 plus the row times four plus the column.
+The item name, worn slot and available equipment come from the session.
+Without an icon table, the cell displays the slot abbreviation.
+The Commands and Party headings have extra clearance for the new typeface.
+
+| Commands selection | Game connection in this pass |
+| --- | --- |
+| Party → Seek Party or Play Solo | The client sends one configuration flag to LandSandBoat. The label changes when the server confirms the state. |
+| Party → Member List | A party member or leader can read the current party roster. |
+| Equipment | Opens the existing equipment grid, slot picker and session-backed equip operation. |
+| Magic, Abilities, Items, Status, Key Items, Communication, Config, Map | Reuses each existing window. Some child actions still lack a complete workflow. |
+| Mog House, Current Time, Shut Down, Log Out | Keeps the existing context or direct action. |
+| Synthesis, Trade, Search, Linkshell, Region Info, Missions, Quests, View House, Bazaar, Macros, Help Desk | The Commands entry still lacks its complete retail workflow. |
+
+Other Party management commands remain unavailable. The English `prty1`, `prty2`, `prty3`
+and `prty7` records supply row positions for solo, member, leader and allied-leader layouts.
+Check the allied-leader choice against live retail. The Square Enix Windows manual describes
+the solo Seek Party action on printed page 28. LandSandBoat defines the change in
+`0x0dc_config.h` and confirms it in `0x0b4_config.h` and self character status.
+
+To check the client on Windows, start the existing server. Extract the client to a new folder,
+open it, and double-click `kuluu.exe`. Sign in as usual. Open Commands with the minus key on
+the numeric keypad. Choose Equipment and press Enter. Use the arrow keys to inspect the
+slots. Press Escape to return. When solo, open Party and select Seek Party. After the server
+confirms the change, select Play Solo to clear the flag. In a party, use Member List to see
+the roster. Compare the same views on the original client at the same UI resolution to verify retail behavior.

@@ -140,6 +140,19 @@ pub fn build_subpacket_emote_list_req(sync: u16) -> Vec<u8> {
     build_subpacket_header(ffxi_proto::map::c2s::EMOTE_LIST, 1, sync).to_vec()
 }
 
+// vendor/server/src/map/packets/c2s/0x0dc_config.h: InviteFlg selects the bit. SetFlg sets or clears it.
+pub fn build_party_seek(sync: u16, enabled: bool) -> Vec<u8> {
+    let mut packet = vec![0; 20];
+    packet[..4].copy_from_slice(&build_subpacket_header(
+        ffxi_proto::map::c2s::CONFIG,
+        5,
+        sync,
+    ));
+    packet[4] = 1;
+    packet[16] = if enabled { 1 } else { 2 };
+    packet
+}
+
 // c2s 0x0F4 GP_CLI_COMMAND_TRACKING_LIST: uint32 SendFlg (must be 1). Requests
 // the wide-scan list; the server frames the reply with 0x0F6 ListStart/ListEnd.
 // vendor/server/src/map/packets/c2s/0x0f4_tracking_list.h.

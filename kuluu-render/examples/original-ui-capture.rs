@@ -12,17 +12,18 @@ use kuluu_render::graphics_settings::GraphicsSettings;
 use kuluu_render::hud::classic_status::{
     update_classic_status_system, ClassicFrame, ClassicGaugeRow,
 };
-use kuluu_render::hud::menu::{MainMenuPane, MainMenuRow};
+use kuluu_render::hud::menu::{MainMenuPane, MainMenuRow, MainMenuTitle};
 use kuluu_render::hud::network_status;
 use kuluu_render::hud::panel_column::layout_panel_column_system;
 use kuluu_render::hud::party_frame::{
     spawn_party_frames, update_party_frame_system, PartyFrameSettings, PartyRowTarget,
 };
 use kuluu_render::hud::retail_text::{RetailMenuCursor, RetailMenuLabel, WINDOW_LABEL_GROUP};
-use kuluu_render::input_mode::{InputMode, MenuStack};
+use kuluu_render::hud::{chat_panel, item_dat_root};
+use kuluu_render::input_mode::{InputMode, MenuKind, MenuStack};
 use kuluu_render::ui_font::{apply_ui_font, load_ui_font, UiFont};
 use kuluu_render::{nameplate_color::NameColorTable, scene::Target, snapshot::SceneState};
-use kuluu_snapshot::{NetStats, PartyMember, SceneSnapshot};
+use kuluu_snapshot::{CharStats, ChatChannel, ChatLine, NetStats, PartyMember, SceneSnapshot};
 
 const PIXEL_CHANNELS: usize = 4;
 const WIDTH: u32 = 1280;
@@ -47,77 +48,126 @@ struct CaptureTarget {
 }
 
 fn main() {
-    let root =
-        ffxi_dat::DatRoot::from_env_or_default().expect("original UI resource install is required");
-    App::new()
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: None,
-                    exit_condition: bevy::window::ExitCondition::DontExit,
-                    ..default()
-                })
-                .disable::<WinitPlugin>(),
+    let mode = std::env::args().nth(2);
+    let root = match mode.as_deref() {
+        Some("cobalt-fallback") => None,
+        None | Some("cobalt") | Some("classic-hud") => Some(Arc::new(
+            ffxi_dat::DatRoot::from_env_or_default()
+                .expect("original UI resource install is required"),
+        )),
+        _ => panic!("usage: original-ui-capture [directory] [classic-hud|cobalt|cobalt-fallback]"),
+    };
+    let mut app = App::new();
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: None,
+                exit_condition: bevy::window::ExitCondition::DontExit,
+                ..default()
+            })
+            .disable::<WinitPlugin>(),
+    )
+    .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+        STEP_SECONDS,
+    )))
+    .add_plugins((
+        kuluu_render::ui_element_atlas::UiElementAtlasPlugin,
+        kuluu_render::hud::retail_frame::RetailFramePlugin,
+        kuluu_render::hud::retail_text::RetailMenuLabelsPlugin,
+    ))
+    .insert_resource(kuluu_render::ui_element_atlas::UiElementDatRoot(
+        root.clone(),
+    ))
+    .insert_resource(InputMode::Menu(MenuStack::root()))
+    .init_resource::<kuluu_render::hud::menu::DynamicMenu>()
+    .init_resource::<kuluu_render::hud::HudPanels>()
+    .init_resource::<kuluu_render::hud::network_status::NetStatusVisible>()
+    .init_resource::<kuluu_render::audio::AudioMuteState>()
+    .init_resource::<GraphicsSettings>()
+    .init_resource::<PartyFrameSettings>()
+    .init_resource::<NameColorTable>()
+    .init_resource::<Target>()
+    .init_resource::<SceneState>()
+    .init_resource::<UiFont>()
+    .add_systems(
+        Startup,
+        (
+            setup,
+            spawn_party_frames,
+            network_status::spawn_network_status,
+            load_ui_font,
+            kuluu_render::hud::menu::spawn_main_menu,
+        ),
+    )
+    .add_systems(
+        Update,
+        (
+            update_party_frame_system,
+            update_classic_status_system,
+            network_status::update_network_status,
+            network_status::apply_net_status_visibility,
+            kuluu_render::hud::menu::update_main_menu,
+            kuluu_render::hud::menu::sync_original_command_labels,
         )
-        .add_plugins(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
-            STEP_SECONDS,
-        )))
-        .add_plugins((
-            kuluu_render::ui_element_atlas::UiElementAtlasPlugin,
-            kuluu_render::hud::retail_frame::RetailFramePlugin,
-            kuluu_render::hud::retail_text::RetailMenuLabelsPlugin,
-        ))
-        .insert_resource(kuluu_render::ui_element_atlas::UiElementDatRoot(Some(
-            Arc::new(root),
-        )))
-        .insert_resource(InputMode::Menu(MenuStack::root()))
-        .init_resource::<kuluu_render::hud::menu::DynamicMenu>()
-        .init_resource::<kuluu_render::hud::HudPanels>()
-        .init_resource::<kuluu_render::hud::network_status::NetStatusVisible>()
-        .init_resource::<kuluu_render::audio::AudioMuteState>()
-        .init_resource::<GraphicsSettings>()
-        .init_resource::<PartyFrameSettings>()
-        .init_resource::<NameColorTable>()
-        .init_resource::<Target>()
-        .init_resource::<SceneState>()
-        .init_resource::<UiFont>()
-        .add_systems(
-            Startup,
-            (
-                setup,
-                spawn_party_frames,
-                network_status::spawn_network_status,
-                load_ui_font,
-                kuluu_render::hud::menu::spawn_main_menu,
-            ),
-        )
-        .add_systems(
-            Update,
-            (
-                drive,
-                update_party_frame_system,
-                update_classic_status_system,
-                network_status::update_network_status,
-                network_status::apply_net_status_visibility,
-                kuluu_render::hud::menu::update_main_menu,
-                kuluu_render::hud::menu::sync_original_command_labels,
+            .chain(),
+    )
+    .add_systems(
+        PostUpdate,
+        network_status::sync_network_layout
+            .before(kuluu_render::hud::retail_frame::OriginalFrameUpdate),
+    )
+    .add_systems(
+        PostUpdate,
+        layout_panel_column_system.after(bevy::ui::UiSystems::Layout),
+    )
+    .add_systems(
+        PostUpdate,
+        apply_ui_font.before(bevy::ui::UiSystems::Content),
+    );
+    if mode.is_some() {
+        use kuluu_render::hud;
+        if mode.as_deref() != Some("classic-hud") {
+            app.add_plugins(hud::astral::AstralCobaltPlugin);
+        }
+        app.insert_resource(item_dat_root::ItemDatRoot(root))
+            .init_resource::<item_dat_root::ItemIconCache>()
+            .init_resource::<chat_panel::ChatScroll>()
+            .init_resource::<chat_panel::BattleScroll>()
+            .init_resource::<chat_panel::DebugScroll>()
+            .init_resource::<chat_panel::ActiveChatTab>()
+            .init_resource::<chat_panel::ChatUnread>()
+            .init_resource::<chat_panel::ChatAutoSwitch>()
+            .init_resource::<hud::item_screen::ItemScreenContainer>()
+            .init_resource::<hud::item_detail::ItemMenuFocus>()
+            .init_resource::<hud::check_view::CheckTarget>()
+            .init_resource::<hud::auction::AuctionScreenState>()
+            .init_resource::<hud::auction::AuctionSellInventory>()
+            .init_resource::<hud::shop::ShopScreenState>()
+            .add_systems(
+                Startup,
+                (
+                    hud::spawn_bottom_left_stack,
+                    hud::menu_help_bar::spawn_menu_help_bar,
+                    setup_viewport,
+                ),
             )
-                .chain(),
-        )
-        .add_systems(
-            PostUpdate,
-            network_status::sync_network_layout
-                .before(kuluu_render::hud::retail_frame::OriginalFrameUpdate),
-        )
-        .add_systems(
-            PostUpdate,
-            layout_panel_column_system.after(bevy::ui::UiSystems::Layout),
-        )
-        .add_systems(
-            PostUpdate,
-            apply_ui_font.before(bevy::ui::UiSystems::Content),
-        )
-        .run();
+            .add_systems(PreUpdate, drive_cobalt)
+            .add_systems(
+                Update,
+                (
+                    chat_panel::apply_chat_layout,
+                    chat_panel::update_chat_panel,
+                    chat_panel::update_chat_tab_visuals_system,
+                    hud::menu_help_bar::update_menu_help_bar,
+                )
+                    .chain(),
+            );
+        app.add_systems(PostStartup, hide_fixture_world_tools);
+        hud::equipment_screen::install_equipment_screen_capture(&mut app);
+    } else {
+        app.add_systems(Update, drive.before(update_party_frame_system));
+    }
+    app.run();
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
@@ -214,6 +264,177 @@ fn fixture(party: bool) -> SceneSnapshot {
         );
     }
     snapshot
+}
+
+// The production chat layout reads the primary window's logical dimensions. The
+// headless camera still renders to the image target, independently of this window.
+fn setup_viewport(mut commands: Commands) {
+    commands.spawn((
+        Window {
+            resolution: (WIDTH, HEIGHT).into(),
+            ..default()
+        },
+        bevy::window::PrimaryWindow,
+    ));
+}
+
+// This fixture has no world camera, map, or server clock. Omit the adjacent
+// world tools so their uninitialized minimap and compass do not cover the HUD.
+fn hide_fixture_world_tools(mut tools: Query<&mut Node, With<kuluu_render::hud::ChatTools>>) {
+    for mut node in &mut tools {
+        node.display = Display::None;
+    }
+}
+
+#[derive(SystemParam)]
+struct CommandHeading<'w, 's> {
+    title: Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform), With<MainMenuTitle>>,
+    rows: Query<
+        'w,
+        's,
+        (
+            &'static MainMenuRow,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+        ),
+    >,
+}
+
+impl CommandHeading<'_, '_> {
+    fn assert_above_first_row(&self) {
+        let (title, title_transform) = self.title.single().expect("visible Commands title");
+        let (_, row, row_transform) = self
+            .rows
+            .iter()
+            .find(|(r, _, _)| r.slot == 0)
+            .expect("visible Status row");
+        let title_bottom = title_transform.translation.y + title.size().y * 0.5;
+        let row_top = row_transform.translation.y - row.size().y * 0.5;
+        assert!(
+            title_bottom <= row_top + 1.0,
+            "Commands title overlaps first row: {title_bottom} > {row_top}"
+        );
+    }
+}
+
+const COBALT_CASES: &[&str] = &["solo-chat", "party-chat", "equipment", "equipment-updated"];
+
+fn drive_cobalt(
+    mut commands: Commands,
+    mut frame: Local<u32>,
+    mut state: ResMut<SceneState>,
+    mut mode: ResMut<InputMode>,
+    target: Res<CaptureTarget>,
+    text: Query<(&Text, &ComputedNode)>,
+    chat: Query<&TextSpan, With<chat_panel::ChatRowSpan>>,
+    astral: Option<Res<kuluu_render::hud::astral::AstralCobalt>>,
+    heading: CommandHeading,
+    capturing: Query<(), With<Capturing>>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let case = (*frame / CASE_FRAMES) as usize;
+    let step = *frame % CASE_FRAMES;
+    *frame += 1;
+    let Some(name) = COBALT_CASES.get(case) else {
+        if capturing.is_empty() {
+            exit.write(AppExit::Success);
+        }
+        return;
+    };
+    if step == 0 {
+        let mut snapshot = fixture(case != 0);
+        let me = &mut snapshot.party[0];
+        me.hp = 837;
+        me.mp = 126;
+        me.tp = 1140;
+        me.hp_pct = 83;
+        me.mp_pct = 70;
+        me.main_job = 5;
+        me.main_job_lv = 50;
+        snapshot.stats = Some(CharStats {
+            str_: 43,
+            dex: 41,
+            vit: 39,
+            agi: 36,
+            int_: 47,
+            mnd: 48,
+            chr: 38,
+            hp_max: 1008,
+            mp_max: 180,
+            attack: 161,
+            defense: 104,
+            ..default()
+        });
+        snapshot.equipped[0] = Some(16535); // Bronze Sword, main hand.
+        snapshot.chat = [
+            (ChatChannel::Say, "Trivius", "Ready when you are."),
+            (ChatChannel::Party, "Caster", "Meet at the gate."),
+            (
+                ChatChannel::Battle,
+                "",
+                "Trivius hits the Huge Hornet for 23 points of damage.",
+            ),
+        ]
+        .into_iter()
+        .map(|(channel, sender, text)| ChatLine {
+            channel,
+            sender: sender.into(),
+            text: text.into(),
+            ..default()
+        })
+        .collect();
+        state.snapshot = snapshot;
+        state.dirty = true;
+        let mut stack = MenuStack::root();
+        stack.current_mut().unwrap().cursor = 1;
+        if case >= 2 {
+            stack.push(MenuKind::Equipment);
+        }
+        *mode = if case == 0 {
+            InputMode::World
+        } else {
+            InputMode::Menu(stack)
+        };
+    }
+    // Exercise a second snapshot with the window already open. A stale or
+    // fixture-painted item title must not survive the equipped-slot change.
+    if case == 3 && step == 1 {
+        state.snapshot.equipped[0] = Some(16536); // Iron Sword, main hand.
+        state.dirty = true;
+    }
+    if step == SETTLE_FRAMES {
+        assert!(
+            chat.iter().any(|span| span.0.contains("Meet at the gate.")),
+            "missing party chat"
+        );
+        let rendered = |needle: &str| {
+            text.iter()
+                .any(|(t, node)| t.0.contains(needle) && node.size().min_element() > 0.0)
+        };
+        assert!(
+            rendered("837") && rendered("126") && rendered("1140"),
+            "missing self vitals"
+        );
+        if case == 1 && astral.is_some() {
+            heading.assert_above_first_row();
+        }
+        if case != 0 {
+            assert!(rendered("Longmembernamexx"), "missing party roster");
+        }
+        if case >= 2 {
+            let item = if case == 2 {
+                "Bronze Sword"
+            } else {
+                "Iron Sword"
+            };
+            assert!(rendered(item), "missing equipped main-hand item {item}");
+            assert!(rendered("837/1008"), "missing Equipment vitals");
+        }
+        commands
+            .spawn(Screenshot::image(target.image.clone()))
+            .observe(save_to_disk(target.directory.join(format!("{name}.png"))));
+        println!("Validated HUD fixture state: {name}");
+    }
 }
 
 fn drive(

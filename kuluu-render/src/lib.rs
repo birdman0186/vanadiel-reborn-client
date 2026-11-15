@@ -216,6 +216,7 @@ impl<S: SceneSource + Resource + Component<Mutability = bevy::ecs::component::Mu
         app.add_plugins(ui_element_atlas::UiElementAtlasPlugin);
         app.add_plugins((
             hud::retail_frame::RetailFramePlugin,
+            hud::astral::AstralCobaltPlugin,
             hud::retail_text::RetailMenuLabelsPlugin,
         ));
 

@@ -126,6 +126,29 @@ pub(super) fn confirm_menu_at_cursor(
         (level.kind, level.cursor)
     };
 
+    if kind == MenuKind::PartyMembers {
+        return None;
+    }
+    if kind == MenuKind::Party {
+        use kuluu_render::hud::menu::{party_option, party_option_enabled};
+        let label = party_option(&scene_state.snapshot, cursor)?;
+        if !party_option_enabled(label, &scene_state.snapshot)
+            || dynamic
+                .rows
+                .get(cursor)
+                .is_none_or(|row| row.label != label)
+        {
+            return None;
+        }
+        if label == "Member List" {
+            stack.push(MenuKind::PartyMembers);
+        } else if let Err(error) = cmd_tx.try_send(AgentCommand::SetSeekingParty {
+            enabled: label == "Seek Party",
+        }) {
+            push_system_chat_line(scene_state, format!("Could not update Seek Party: {error}"));
+        }
+        return None;
+    }
     if matches!(kind, MenuKind::Debug) {
         let label = kuluu_render::hud::menu::entry_label(kind, cursor, dynamic);
         // Volume is a 0..=100 number row adjusted with Left/Right, not a toggle.
@@ -1134,6 +1157,57 @@ mod menu_key_tests {
     }
 
     #[test]
+    fn party_seek_waits_for_server_state_and_keeps_the_menu_open() {
+        use kuluu_render::hud::menu::{DynamicMenuAction, DynamicMenuRow};
+        let mut h = Harness::new();
+        let mut world = marker_world();
+        let mut stack = MenuStack::root();
+        stack.current_mut().unwrap().cursor = kuluu_render::hud::menu::root_entries()
+            .iter()
+            .position(|s| *s == "Party")
+            .unwrap();
+        h.key(
+            &Key::Enter,
+            KeyCode::Enter,
+            &mut stack,
+            world.resource_mut(),
+        );
+        assert_eq!(stack.current().unwrap().kind, MenuKind::Party);
+        h.dynamic.rows = vec![DynamicMenuRow {
+            label: "Seek Party".into(),
+            action: DynamicMenuAction::PartyEntry,
+        }];
+        for (state, displayed, command) in [
+            (None, "Seek Party", None),
+            (Some(false), "Seek Party", Some(true)),
+            (Some(true), "Seek Party", None),
+            (Some(true), "Play Solo", Some(false)),
+        ] {
+            h.scene_state.snapshot.seeking_party = state;
+            h.dynamic.rows[0].label = displayed.into();
+            h.key(
+                &Key::Enter,
+                KeyCode::Enter,
+                &mut stack,
+                world.resource_mut(),
+            );
+            assert_eq!(stack.current().unwrap().kind, MenuKind::Party);
+            assert_eq!(h.scene_state.snapshot.seeking_party, state);
+            assert_eq!(
+                h.cmd_rx.try_recv().ok(),
+                command.map(|enabled| AgentCommand::SetSeekingParty { enabled })
+            );
+        }
+        h.key(
+            &Key::Escape,
+            KeyCode::Escape,
+            &mut stack,
+            world.resource_mut(),
+        );
+        assert_eq!(stack.current().unwrap().kind, MenuKind::Root);
+    }
+
+    #[test]
     fn last_root_row_opens_mog_menu_inside_and_map_outside() {
         let mut harness = Harness::new();
         let mut world = marker_world();
@@ -1531,7 +1605,6 @@ mod menu_dispatch_tests {
     fn unwired_root_entries_stay_not_implemented() {
         for label in [
             "Synthesis",
-            "Party",
             "Trade",
             "Search",
             "Linkshell",

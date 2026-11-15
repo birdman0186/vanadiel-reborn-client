@@ -224,6 +224,8 @@ impl ChatHistory {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum MenuKind {
     Root,
+    Party,
+    PartyMembers,
 
     Config,
 

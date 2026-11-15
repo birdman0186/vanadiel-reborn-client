@@ -29,6 +29,9 @@ const TP_UNITS_PER_PERCENT: u32 = 10;
 #[derive(Component)]
 pub struct ClassicGaugeRow;
 
+#[derive(Component)]
+pub(super) struct ClassicText;
+
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum ClassicFrame {
     SelfStatus,
@@ -165,6 +168,7 @@ pub fn update_classic_status_system(
 
 fn label(parent: &mut ChildSpawnerCommands, text: String, color: Color, sc: f32) {
     parent.spawn((
+        ClassicText,
         Text::new(text),
         style::text_font(FONT_PX * sc),
         TextColor(color),
@@ -199,6 +203,11 @@ fn gauge(parent: &mut ChildSpawnerCommands, pct: u8, color: Color, sc: f32) {
                     ..default()
                 },
                 BackgroundColor(color),
+                BackgroundGradient::from(LinearGradient::to_bottom(vec![
+                    ColorStop::new(color.mix(&Color::WHITE, 0.42), Val::Percent(0.0)),
+                    ColorStop::new(color, Val::Percent(42.0)),
+                    ColorStop::new(color.mix(&Color::BLACK, 0.40), Val::Percent(100.0)),
+                ])),
             ));
         });
 }
@@ -282,6 +291,7 @@ fn spawn_party_member(
                 })
                 .with_children(|row| {
                     row.spawn((
+                        ClassicText,
                         Text::new(name),
                         style::text_font(FONT_PX * sc),
                         TextColor(colors.color(if is_self { ncol::PC } else { ncol::PARTY })),

@@ -1122,7 +1122,7 @@ fn sub_target_action_for(
         A::OpenItemAction { .. } => None,
         A::DropItem { .. } => None,
         A::EquipItem { .. } => None,
-        A::KeyItem { .. } => None,
+        A::KeyItem { .. } | A::PartyEntry => None,
         A::Emote { .. } => None,
     }
 }
@@ -1646,7 +1646,7 @@ fn dispatch_dynamic_menu_action(
         }
         A::OpenItemAction { .. } | A::DropItem { .. } => return,
         // Handled in confirm_menu_at_cursor (chat echo, menu stays open).
-        A::KeyItem { .. } => return,
+        A::KeyItem { .. } | A::PartyEntry => return,
         A::EquipItem {
             container,
             container_index,

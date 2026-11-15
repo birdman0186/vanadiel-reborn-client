@@ -1652,6 +1652,13 @@ fn handle_sub_packet(
                 }
             }
         }
+        s2c::CONFIG => {
+            if let Some(flags) = sub.data.first() {
+                let _ = event_tx.send(AgentEvent::SeekingPartyUpdated {
+                    enabled: flags & 1 != 0,
+                });
+            }
+        }
         s2c::EMOTE_LIST => {
             if let Ok(e) =
                 decode::EmoteList::decode(sub.data).inspect_err(|e| warn_decode_err(sub.opcode, e))
@@ -1683,6 +1690,9 @@ fn handle_sub_packet(
                 decode::CharStatus::decode(sub.data).inspect_err(|e| warn_decode_err(sub.opcode, e))
             {
                 if cs.unique_no == self_char_id {
+                    let _ = event_tx.send(AgentEvent::SeekingPartyUpdated {
+                        enabled: cs.seeking_party,
+                    });
                     // Self speed lands here, not in CHAR_PC — including bind's 0
                     // (vendor/server/scripts/effects/bind.lua setBaseSpeed(0)).
                     self_pos.speed = cs.speed.min(u16::from(u8::MAX)) as u8;
@@ -3458,6 +3468,13 @@ async fn keepalive_loop(
                             let _ = event_tx.send(AgentEvent::Error {
                                 message: format!("emote send: {e}"),
                             });
+                        }
+                    }
+                    Some(AgentCommand::SetSeekingParty { enabled }) => {
+                        let payload = codec::build_party_seek(sub_seq, enabled);
+                        sub_seq = sub_seq.wrapping_add(1);
+                        if let Err(error) = map.send_encrypted(&payload, datagram_header_id(sub_seq), server_last_seq).await {
+                            let _ = event_tx.send(AgentEvent::Error { message: format!("Seek Party: {error}") });
                         }
                     }
                     Some(AgentCommand::RequestEmoteList) => {

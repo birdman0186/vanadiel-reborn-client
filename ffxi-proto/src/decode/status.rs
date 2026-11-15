@@ -9,6 +9,7 @@ use crate::s2c_layout::clistatus as lsb;
 pub struct CharStatus {
     pub unique_no: u32,
     pub hpp: u8,
+    pub seeking_party: bool,
     pub dead_counter1: u32,
     pub dead_counter2: u32,
     /// The self player's animation byte (ANIMATIONTYPE); see [`animation`]. Mirrors the
@@ -75,6 +76,7 @@ impl CharStatus {
         let flags0 = rd(Self::FLAGS0_OFFSET);
         Ok(Self {
             unique_no: rd(Self::UNIQUE_NO_OFFSET),
+            seeking_party: flags0 & (1 << 4) != 0,
             hpp: ((flags0 >> Self::HPP_SHIFT) & Self::HPP_MASK) as u8,
             dead_counter1: rd(Self::DEAD_COUNTER1_OFFSET),
             dead_counter2: rd(Self::DEAD_COUNTER2_OFFSET),
@@ -503,6 +505,7 @@ mod char_status_tests {
     fn char_status_homepoint_seconds_boundaries() {
         let secs = |dc1: u32| {
             CharStatus {
+                seeking_party: false,
                 unique_no: 0,
                 hpp: 0,
                 dead_counter1: dc1,

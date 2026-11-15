@@ -34,6 +34,14 @@ pub(super) fn record_for<'a>(
     })
 }
 
+pub(super) fn party_record(page: &MenuLayout, row: usize) -> Option<&MenuRecord> {
+    // prty1, prty2, prty3 and prty7 use the same label pitch. The DAT stores children out of visual order.
+    let y = i16::try_from(row).ok()?.checked_mul(16)?.checked_add(6)?;
+    page.children.iter().find(|r| {
+        r.y == y && visible_resource(r).is_some_and(|g| g.group == WINDOW_LABEL_GROUP.trim_end())
+    })
+}
+
 pub(super) fn position(node: &mut Node, record: Option<&MenuRecord>) {
     let (mode, x, y) = match record {
         Some(record) => (
@@ -143,15 +151,16 @@ fn column_clearance(
 }
 
 fn prepare_layout(
+    scene: Option<Res<crate::snapshot::SceneState>>,
     mode: Option<Res<InputMode>>,
     mut atlas: ResMut<UiElementAtlas>,
     root: Res<UiElementDatRoot>,
     mut current: ResMut<CommandLayout>,
 ) {
     let desired = match mode.as_deref() {
-        Some(InputMode::Menu(stack)) => {
-            stack.current().filter(|level| level.kind == MenuKind::Root)
-        }
+        Some(InputMode::Menu(stack)) => stack
+            .current()
+            .filter(|level| matches!(level.kind, MenuKind::Root | MenuKind::Party)),
         _ => None,
     };
     let Some(level) = desired else {
@@ -160,13 +169,23 @@ fn prepare_layout(
         }
         return;
     };
-    let page = atlas.ensure_layout(menu::root_layout_name(level.cursor), &root);
+    let name = if level.kind == MenuKind::Party {
+        scene
+            .as_ref()
+            .map_or("menu    prty1", |s| menu::party_layout(&s.snapshot))
+    } else {
+        menu::root_layout_name(level.cursor)
+    };
+    let page = atlas.ensure_layout(name, &root);
     match (&current.0, &page) {
         (Some(old), Some(new)) if Arc::ptr_eq(old, new) => return,
         (None, None) => return,
         _ => {}
     }
     current.0 = page.filter(|page| {
+        if level.kind == MenuKind::Party {
+            return page.root.width > 0 && page.root.height > 0 && party_record(page, 0).is_some();
+        }
         let (first, end) = menu::root_page_bounds(level.cursor);
         page.root.width > 0
             && page.root.height > 0
@@ -255,7 +274,9 @@ impl Plugin for CommandLayoutPlugin {
             .add_systems(Update, prepare_layout.before(menu::update_main_menu))
             .add_systems(
                 PostUpdate,
-                sync_decoration.before(super::retail_frame::OriginalFrameUpdate),
+                sync_decoration
+                    .run_if(not(resource_exists::<super::astral::AstralCobalt>))
+                    .before(super::retail_frame::OriginalFrameUpdate),
             );
     }
 }
