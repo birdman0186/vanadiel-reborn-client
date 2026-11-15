@@ -57,6 +57,9 @@ jobs:
         run: |
           cargo test --locked --release -p ffxi-proto -p ffxi-vocab -p kuluu-session --lib
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test original menu layout reader
+        shell: pwsh
+        run: cargo test --locked --release -p ffxi-dat --lib menu_layout::tests
       - name: Build party-frame capture
         if: env.VDR_VERIFY_ONLY == 'true'
         env:
@@ -96,6 +99,10 @@ jobs:
           cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib hud::retail
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib ui_element_atlas::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib hud::network_status::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib keybinds::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib hud::menu::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
