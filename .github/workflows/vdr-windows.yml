@@ -82,6 +82,12 @@ jobs:
         if: env.VDR_VERIFY_ONLY != 'true'
         shell: pwsh
         run: ./packaging/vanadiel-reborn/build-windows.ps1
+      - name: Test classic HUD state and rollback
+        if: env.VDR_VERIFY_ONLY != 'true'
+        shell: pwsh
+        run: |
+          cargo test --locked --release -p kuluu-render --lib hud::classic_status::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
         if: env.VDR_VERIFY_ONLY != 'true'
         with:
