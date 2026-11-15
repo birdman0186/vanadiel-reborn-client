@@ -150,7 +150,8 @@ Source: [Square Enix, FINAL FANTASY XI manual, printed page 25](https://support.
 
 The owner supplied a two-page Commands image and a Mouse/Camera configuration image.
 The Commands image shows a white right-pointing cursor on both pages.
-The Mouse/Camera panel shows a gold cursor. Cursor appearance therefore depends on the panel.
+The Mouse/Camera image shows a gold cursor. The two images do not identify the cause of the difference.
+The Commands records in the supplied install specify a gold double-chevron. The white wedge remains unverified.
 The selected label and its button background are gold on both Commands pages.
 The first page shows Mog House in the last row. The normal field layout specifies Map in that slot.
 The images do not establish every condition that substitutes the Mog House entry.
@@ -186,13 +187,22 @@ The window artwork supplies no player records. Kuluu's current search client han
 The `original-ui-capture` example renders both pages at 100%, 150% and 200% with each of the eight window styles.
 It uses the production Commands and status systems with fixture session data.
 The example compares rendered pane dimensions, row positions, artwork indices and cursor selection against the observed English layout.
+It also checks that every digit in the 100%, S 309 and R 196 readouts fits below the Network title and inside the pane.
 It checks for visible pixels in each row and overlap with the status display.
 At the normal scale, the Commands pane uses the right column.
 At large scales, a tall party roster can reach the Commands pane.
 Kuluu moves the Commands pane left when the measured rectangles intersect.
 This adjustment keeps the roster and command buttons visible together.
 Each file name identifies the page, style, party state and scale.
-These checks cover the Commands pane. They do not establish parity across the complete retail interface.
+The capture uses off-screen rendering. It does not measure live game performance.
+
+Run the comparison from the repository root with the English game install selected.
+The last argument is a new output directory for the 48 PNG files.
+
+```powershell
+$env:FFXI_DAT_PATH = 'E:\Final Fantasy XI\SquareEnix\FINAL FANTASY XI'
+cargo run --locked --release -p kuluu-render --example original-ui-capture -- commands-captures
+```
 
 ## Provenance
 
