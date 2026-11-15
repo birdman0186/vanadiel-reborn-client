@@ -181,6 +181,7 @@ impl NetworkAssets {
 #[derive(Default)]
 pub struct NetworkLayoutCache {
     source: Option<(Entity, u64)>,
+    rendered: Option<(kuluu_snapshot::NetStats, usize)>,
     assets: Option<NetworkAssets>,
 }
 
@@ -233,9 +234,11 @@ fn network_character<'a>(
         1 => (58.0, 4.0, width - 60.0),
         _ => (58.0, 15.0, width - 60.0),
     };
-    let advance = (room / text.len() as f32).min(8.0).max(0.0);
-    let scale = advance / 8.0;
-    let left = x + column as f32 * advance;
+    let prefix_space = if line == 0 { 0.0 } else { 6.0 };
+    let natural_width = text.len() as f32 * 8.0 - prefix_space;
+    let scale = (room / natural_width).clamp(0.0, 1.0);
+    let preceding_space = if column > 1 { prefix_space } else { 0.0 };
+    let left = x + (column as f32 * 8.0 - preceding_space) * scale;
     let rect = Rect::from_corners(
         Vec2::new(left, y),
         Vec2::new(left + quad.rect.width() * scale, y + quad.rect.height()),
@@ -271,8 +274,10 @@ pub fn sync_network_layout(
     };
     let layout = atlas.ensure_layout(NET_LAYOUT, &root);
     let key = (parent, atlas.generation());
-    if cache.source != Some(key) {
+    let reload = cache.source != Some(key);
+    if reload {
         cache.source = Some(key);
+        cache.rendered = None;
         cache.assets = None;
         for entity in &art {
             commands.entity(entity).despawn();
@@ -328,7 +333,7 @@ pub fn sync_network_layout(
             };
         }
     }
-    let (Some(assets), Some(layout)) = (&cache.assets, layout) else {
+    let Some(layout) = layout.filter(|_| cache.assets.is_some()) else {
         return;
     };
     let active = command_layout.as_deref().and_then(CommandLayout::page);
@@ -345,13 +350,18 @@ pub fn sync_network_layout(
         node.right = Val::Px(right);
     }
     let stats = scene.snapshot.net_stats;
+    let phase = (time.elapsed_secs() * METER_PHASES as f32) as usize % METER_PHASES;
+    if reload || cache.rendered == Some((stats, phase)) {
+        return;
+    }
+    cache.rendered = Some((stats, phase));
+    let Some(assets) = &cache.assets else { return };
     let percent = stats.send_health.min(stats.recv_health);
     let lines = [
         format!("{percent}%"),
         format!("S {}", stats.send_bps),
         format!("R {}", stats.recv_bps),
     ];
-    let phase = (time.elapsed_secs() * METER_PHASES as f32) as usize % METER_PHASES;
     for (sprite, mut node, mut image) in &mut sprites {
         let drawing = match *sprite {
             NetworkSprite::Arrow(index) => {
@@ -517,9 +527,6 @@ pub fn apply_net_status_visibility(
     visible: Res<NetStatusVisible>,
     mut q: Query<&mut Visibility, With<NetworkStatusPanel>>,
 ) {
-    if !visible.is_changed() {
-        return;
-    }
     let want = if visible.0 {
         Visibility::Inherited
     } else {
@@ -559,6 +566,91 @@ mod tests {
     fn rgb(c: Color) -> (f32, f32, f32) {
         let s = c.to_srgba();
         (s.red, s.green, s.blue)
+    }
+
+    fn network_app(root: UiElementDatRoot) -> App {
+        let mut app = App::new();
+        app.insert_resource(root)
+            .init_resource::<Assets<Image>>()
+            .init_resource::<SceneState>()
+            .init_resource::<Time>()
+            .init_resource::<UiElementAtlas>()
+            .init_resource::<NetStatusVisible>()
+            .add_systems(Startup, spawn_network_status)
+            .add_systems(Update, (update_network_status, apply_net_status_visibility))
+            .add_systems(PostUpdate, sync_network_layout);
+        app
+    }
+
+    #[test]
+    fn no_install_keeps_the_live_fallback_and_visibility_setting() {
+        let mut app = network_app(UiElementDatRoot::default());
+        app.world_mut()
+            .resource_mut::<SceneState>()
+            .snapshot
+            .net_stats
+            .send_bps = 173;
+        app.world_mut().resource_mut::<NetStatusVisible>().0 = false;
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(
+            world
+                .query_filtered::<&Text, With<NetSendLabel>>()
+                .single(world)
+                .unwrap()
+                .0,
+            "173"
+        );
+        let (node, visibility) = world
+            .query_filtered::<(&Node, &Visibility), With<NetworkStatusPanel>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(node.width, Val::Px(NET_PANEL_W));
+        assert_eq!(*visibility, Visibility::Hidden);
+        assert_eq!(world.query::<&NetworkSprite>().iter(world).count(), 0);
+    }
+
+    #[test]
+    fn installed_network_art_updates_live_digits_and_restores_fallback_on_unlink() {
+        let Ok(root) = ffxi_dat::DatRoot::from_env_or_default() else {
+            return;
+        };
+        let mut app = network_app(UiElementDatRoot(Some(std::sync::Arc::new(root))));
+        let stats = &mut app
+            .world_mut()
+            .resource_mut::<SceneState>()
+            .snapshot
+            .net_stats;
+        stats.send_health = 100;
+        stats.recv_health = 55;
+        stats.send_bps = u32::MAX;
+        stats.recv_bps = 123;
+        app.update();
+        app.update();
+        let world = app.world_mut();
+        let panel = world
+            .query_filtered::<&Node, With<OriginalBackdrop>>()
+            .single(world)
+            .unwrap();
+        assert_eq!(panel.top, Val::Px(16.0));
+        assert_eq!((panel.width, panel.height), (Val::Px(112.0), Val::Px(30.0)));
+        let visible_sprites = METER_PARTS + "55%".len() + "S4294967295".len() + "R123".len();
+        assert_eq!(
+            world
+                .query::<(&NetworkSprite, &Node)>()
+                .iter(world)
+                .filter(|(_, node)| node.display == Display::Flex)
+                .count(),
+            visible_sprites
+        );
+        world.resource_mut::<UiElementDatRoot>().0 = None;
+        app.update();
+        let world = app.world_mut();
+        assert_eq!(world.query::<&NetworkArtwork>().iter(world).count(), 0);
+        assert!(world
+            .query_filtered::<&Node, With<FallbackContent>>()
+            .iter(world)
+            .all(|item| item.display == Display::Flex));
     }
 
     #[test]

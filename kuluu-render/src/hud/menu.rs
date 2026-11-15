@@ -94,7 +94,7 @@ pub fn entry_label_in_scene<'a>(
     scene: &kuluu_snapshot::SceneSnapshot,
 ) -> &'a str {
     if kind == MenuKind::Root {
-        if let Some((label, _)) = root_command(idx, scene.myroom.is_some()) {
+        if let Some((label, _)) = root_command(idx, scene.self_in_mog_house()) {
             return label;
         }
     }
@@ -828,7 +828,7 @@ pub fn sync_original_command_labels(
             let (start, end) = root_page_bounds(level.cursor);
             let index = start + row.slot;
             (index < end)
-                .then(|| root_command(index, scene.snapshot.myroom.is_some()))
+                .then(|| root_command(index, scene.snapshot.self_in_mog_house()))
                 .flatten()
                 .map(|(_, sprite)| {
                     (
