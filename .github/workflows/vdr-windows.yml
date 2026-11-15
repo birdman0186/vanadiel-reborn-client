@@ -49,6 +49,9 @@ jobs:
       - name: Test local inspection tool
         shell: pwsh
         run: python -m unittest discover -s packaging/vanadiel-reborn -p 'test_*.py' -v
+      - name: Test original UI resource collector
+        shell: powershell
+        run: ./packaging/vanadiel-reborn/Test-UiResourceCollector.ps1
       - name: Test protocol and session libraries
         shell: pwsh
         run: |
@@ -87,6 +90,8 @@ jobs:
         shell: pwsh
         run: |
           cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib hud::classic_status::tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p kuluu-render --lib picking::tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v7
         if: env.VDR_VERIFY_ONLY != 'true'
