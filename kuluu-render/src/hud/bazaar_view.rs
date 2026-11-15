@@ -154,11 +154,11 @@ pub(crate) fn spawn_bazaar_view(mut commands: Commands, mut images: ResMut<Asset
             },
         ))
         .with_children(|root| {
-            let (mut n, bg, bd) = framed_box();
+            let (mut n, bg, bd, frame) = framed_box();
             n.width = Val::Px(PANEL_WIDTH_PX);
             n.flex_direction = FlexDirection::Row;
             n.column_gap = Val::Px(LIST_GAP_PX);
-            root.spawn((n, bg, bd)).with_children(|p| {
+            root.spawn((n, bg, bd, frame)).with_children(|p| {
                 p.spawn(Node {
                     flex_direction: FlexDirection::Column,
                     flex_grow: 1.0,
@@ -216,9 +216,9 @@ pub(crate) fn spawn_bazaar_view(mut commands: Commands, mut images: ResMut<Asset
                 ..default()
             })
             .with_children(|under| {
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.width = Val::Px(GIL_BOX_PX);
-                under.spawn((n, bg, bd)).with_children(|g| {
+                under.spawn((n, bg, bd, frame)).with_children(|g| {
                     g.spawn((
                         BazaarText(BazaarRole::GilLabel),
                         Text::new(""),
@@ -236,11 +236,11 @@ pub(crate) fn spawn_bazaar_view(mut commands: Commands, mut images: ResMut<Asset
                     });
                 });
 
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.width = Val::Px(PANEL_WIDTH_PX - GIL_BOX_PX - 6.0);
                 n.flex_direction = FlexDirection::Row;
                 n.column_gap = Val::Px(6.0);
-                under.spawn((n, bg, bd)).with_children(|d| {
+                under.spawn((n, bg, bd, frame)).with_children(|d| {
                     d.spawn((
                         BazaarDetailIcon,
                         Node {

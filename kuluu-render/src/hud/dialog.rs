@@ -99,6 +99,7 @@ pub fn spawn_dialog_panel(mut commands: Commands, mut images: ResMut<Assets<Imag
                 display: Display::None,
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
         ))

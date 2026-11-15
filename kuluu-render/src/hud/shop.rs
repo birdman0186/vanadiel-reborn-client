@@ -523,74 +523,81 @@ pub(crate) fn spawn_shop_panel(mut commands: Commands, mut images: ResMut<Assets
                 ..default()
             })
             .with_children(|top| {
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.width = Val::Px(PANEL_WIDTH_PX);
                 n.flex_direction = FlexDirection::Row;
                 n.column_gap = Val::Px(4.0);
-                top.spawn((n, bg, bd, ShopListBox, RelativeCursorPosition::default()))
-                    .with_children(|p| {
-                        p.spawn(Node {
-                            flex_direction: FlexDirection::Column,
-                            flex_grow: 1.0,
-                            min_width: Val::Px(0.0),
-                            ..default()
-                        })
-                        .with_children(|list| {
-                            for i in 0..LIST_ROWS {
-                                list.spawn((
-                                    ShopHotRow {
-                                        region: ShopRegion::List,
-                                        slot: i,
+                top.spawn((
+                    n,
+                    bg,
+                    bd,
+                    frame,
+                    ShopListBox,
+                    RelativeCursorPosition::default(),
+                ))
+                .with_children(|p| {
+                    p.spawn(Node {
+                        flex_direction: FlexDirection::Column,
+                        flex_grow: 1.0,
+                        min_width: Val::Px(0.0),
+                        ..default()
+                    })
+                    .with_children(|list| {
+                        for i in 0..LIST_ROWS {
+                            list.spawn((
+                                ShopHotRow {
+                                    region: ShopRegion::List,
+                                    slot: i,
+                                },
+                                Button,
+                                Hovered::default(),
+                                list_view::row_node(),
+                            ))
+                            .with_children(|row| {
+                                row.spawn((
+                                    ShopRowIcon(i),
+                                    Node {
+                                        width: Val::Px(ROW_ICON_PX),
+                                        height: Val::Px(ROW_ICON_PX),
+                                        flex_shrink: 0.0,
+                                        ..default()
                                     },
-                                    Button,
-                                    Hovered::default(),
-                                    list_view::row_node(),
-                                ))
-                                .with_children(|row| {
-                                    row.spawn((
-                                        ShopRowIcon(i),
-                                        Node {
-                                            width: Val::Px(ROW_ICON_PX),
-                                            height: Val::Px(ROW_ICON_PX),
-                                            flex_shrink: 0.0,
-                                            ..default()
-                                        },
-                                        ImageNode::new(placeholder.clone()),
-                                        BackgroundColor(theme::CELL_BG),
-                                    ));
-                                    row.spawn(list_view::row_label_clip()).with_children(|col| {
-                                        col.spawn((
-                                            ShopText(ShopTextRole::RowName(i)),
-                                            Text::new(""),
-                                            text_font(13.0),
-                                            TextColor(theme::TEXT),
-                                            list_view::row_label_layout(),
-                                        ));
-                                    });
-                                    row.spawn((
-                                        ShopText(ShopTextRole::RowPrice(i)),
+                                    ImageNode::new(placeholder.clone()),
+                                    BackgroundColor(theme::CELL_BG),
+                                ));
+                                row.spawn(list_view::row_label_clip()).with_children(|col| {
+                                    col.spawn((
+                                        ShopText(ShopTextRole::RowName(i)),
                                         Text::new(""),
                                         text_font(13.0),
                                         TextColor(theme::TEXT),
-                                        TextLayout {
-                                            justify: Justify::Right,
-                                            linebreak: LineBreak::NoWrap,
-                                        },
-                                        Node {
-                                            width: Val::Px(PRICE_COL_PX),
-                                            flex_shrink: 0.0,
-                                            ..default()
-                                        },
+                                        list_view::row_label_layout(),
                                     ));
                                 });
-                            }
-                        });
-                        list_view::spawn_scrollbar(p, ShopScrollTrack, ShopScrollThumb);
+                                row.spawn((
+                                    ShopText(ShopTextRole::RowPrice(i)),
+                                    Text::new(""),
+                                    text_font(13.0),
+                                    TextColor(theme::TEXT),
+                                    TextLayout {
+                                        justify: Justify::Right,
+                                        linebreak: LineBreak::NoWrap,
+                                    },
+                                    Node {
+                                        width: Val::Px(PRICE_COL_PX),
+                                        flex_shrink: 0.0,
+                                        ..default()
+                                    },
+                                ));
+                            });
+                        }
                     });
+                    list_view::spawn_scrollbar(p, ShopScrollTrack, ShopScrollThumb);
+                });
 
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.width = Val::Px(DOCK_WIDTH_PX);
-                top.spawn((n, bg, bd)).with_children(|dock| {
+                top.spawn((n, bg, bd, frame)).with_children(|dock| {
                     dock.spawn((
                         ShopText(ShopTextRole::MenuTitle),
                         Text::new(SHOP_TITLE),
@@ -621,9 +628,9 @@ pub(crate) fn spawn_shop_panel(mut commands: Commands, mut images: ResMut<Assets
                 ..default()
             })
             .with_children(|under| {
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.width = Val::Px(GIL_BOX_PX);
-                under.spawn((n, bg, bd)).with_children(|g| {
+                under.spawn((n, bg, bd, frame)).with_children(|g| {
                     g.spawn((
                         ShopText(ShopTextRole::GilLabel),
                         Text::new(""),
@@ -655,11 +662,11 @@ pub(crate) fn spawn_shop_panel(mut commands: Commands, mut images: ResMut<Assets
                     }
                 });
 
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.width = Val::Px(PANEL_WIDTH_PX - GIL_BOX_PX - 6.0);
                 n.flex_direction = FlexDirection::Row;
                 n.column_gap = Val::Px(6.0);
-                under.spawn((n, bg, bd)).with_children(|d| {
+                under.spawn((n, bg, bd, frame)).with_children(|d| {
                     d.spawn((
                         ShopDetailIcon,
                         Node {

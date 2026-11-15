@@ -856,7 +856,7 @@ pub(crate) fn spawn_map_screen(mut commands: Commands, mut images: ResMut<Assets
         });
 
     // Top-right command / submode panel, above the map.
-    let (mut n, bg, bd) = style::window_frame();
+    let (mut n, bg, bd, frame) = style::window_frame();
     n.position_type = PositionType::Absolute;
     n.top = Val::Px(PANEL_TOP_PX);
     n.right = Val::Px(PANEL_RIGHT_PX);
@@ -874,6 +874,7 @@ pub(crate) fn spawn_map_screen(mut commands: Commands, mut images: ResMut<Assets
             n,
             bg,
             bd,
+            frame,
             ZIndex(style::WINDOW_Z),
         ))
         .with_children(|col| {

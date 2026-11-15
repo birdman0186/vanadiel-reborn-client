@@ -132,6 +132,7 @@ pub fn spawn_status_panel(mut commands: Commands) {
                 display: Display::None,
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
         ))

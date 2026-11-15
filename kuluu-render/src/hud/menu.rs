@@ -7,6 +7,7 @@ use crate::graphics_settings::{
     config_rows, dlss_config_rows, graphics_rows, GraphicsField, GraphicsSection, GraphicsSettings,
     MenuRow, CONFIG_SECTIONS, DLSS_CONFIG_SECTIONS, GRAPHICS_SECTIONS,
 };
+use crate::hud::retail_text::{RetailMenuCursor, RetailMenuLabel, WINDOW_LABEL_GROUP};
 use crate::hud::style::{self, theme};
 use crate::input_mode::{InputMode, MenuKind, MenuStack};
 
@@ -55,6 +56,46 @@ const ROOT_ENTRIES: &[&str] = &[
 ];
 
 const ROOT_PAGE_1_LEN: usize = 8;
+
+// .agents/skills/retail-observe/references/original-ui-resources-2026-11-15.md Command labels.
+const ROOT_LABEL_SPRITES: &[Option<usize>] = &[
+    Some(13),
+    Some(15),
+    Some(17),
+    Some(19),
+    Some(21),
+    Some(20),
+    Some(18),
+    Some(23),
+    Some(22),
+    Some(29),
+    Some(27),
+    Some(34),
+    None,
+    None,
+    #[cfg(feature = "debug-menu")]
+    None,
+    Some(35),
+    Some(33),
+];
+
+const MENU_TITLE_GROUP: &str = "menu    comwin";
+
+fn original_title(kind: MenuKind) -> Option<RetailMenuLabel> {
+    let index = match kind {
+        MenuKind::Root => 16,
+        MenuKind::Status => 17,
+        MenuKind::Magic => 18,
+        MenuKind::Abilities => 20,
+        MenuKind::Config => 21,
+        MenuKind::Items | MenuKind::UsableItems => 25,
+        MenuKind::Map => 28,
+        MenuKind::Equipment => 37,
+        MenuKind::Communication => 39,
+        _ => return None,
+    };
+    Some(RetailMenuLabel::new(MENU_TITLE_GROUP, index))
+}
 
 /// The half-open `[start, end)` range of `ROOT_ENTRIES` the page containing
 /// `cursor` occupies. The Command menu shows one page at a time; "-" and the
@@ -731,6 +772,65 @@ fn text_nowrap() -> TextLayout {
 #[derive(Component)]
 pub struct MainMenuPane;
 
+pub fn sync_original_command_labels(
+    mut commands: Commands,
+    mode: Res<InputMode>,
+    rows: Query<(
+        Entity,
+        &MainMenuRow,
+        Option<&RetailMenuLabel>,
+        Option<&RetailMenuCursor>,
+    )>,
+    titles: Query<(Entity, Option<&RetailMenuLabel>), With<MainMenuTitle>>,
+) {
+    let desired_title = match &*mode {
+        InputMode::Menu(stack) => stack.current().and_then(|level| original_title(level.kind)),
+        _ => None,
+    };
+    for (entity, current) in &titles {
+        match desired_title {
+            Some(label) if current != Some(&label) => {
+                commands.entity(entity).insert(label);
+            }
+            None if current.is_some() => {
+                commands.entity(entity).remove::<RetailMenuLabel>();
+            }
+            _ => {}
+        }
+    }
+    let root = match &*mode {
+        InputMode::Menu(stack) => stack.current().filter(|level| level.kind == MenuKind::Root),
+        _ => None,
+    };
+    for (entity, row, current_label, current_cursor) in &rows {
+        let desired = root.and_then(|level| {
+            let (start, end) = root_page_bounds(level.cursor);
+            let index = start + row.slot;
+            (index < end)
+                .then(|| ROOT_LABEL_SPRITES.get(index).copied().flatten())
+                .flatten()
+                .map(|sprite| {
+                    (
+                        RetailMenuLabel::new(WINDOW_LABEL_GROUP, sprite),
+                        RetailMenuCursor::command(level.cursor == index),
+                    )
+                })
+        });
+        if let Some((label, cursor)) = desired {
+            if current_label != Some(&label) {
+                commands.entity(entity).insert(label);
+            }
+            if current_cursor != Some(&cursor) {
+                commands.entity(entity).insert(cursor);
+            }
+        } else if current_label.is_some() || current_cursor.is_some() {
+            commands
+                .entity(entity)
+                .remove::<(RetailMenuLabel, RetailMenuCursor)>();
+        }
+    }
+}
+
 pub fn spawn_main_menu(mut commands: Commands) {
     commands
         .spawn((
@@ -739,7 +839,11 @@ pub fn spawn_main_menu(mut commands: Commands) {
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(48.0),
-                right: Val::Px(8.0),
+                right: Val::Px(
+                    style::PANEL_WIDTH_PX
+                        + style::PANEL_COLUMN_RIGHT_PX
+                        + style::PANEL_COLUMN_GAP_PX,
+                ),
                 display: Display::None,
                 ..default()
             },
@@ -748,10 +852,10 @@ pub fn spawn_main_menu(mut commands: Commands) {
 }
 
 fn spawn_pane_column(parent: &mut ChildSpawnerCommands) {
-    let (mut node, bg, border) = style::window_frame();
+    let (mut node, bg, border, frame) = style::window_frame();
     node.width = Val::Px(MENU_PANE_WIDTH);
     parent
-        .spawn((MainMenuPane, node, bg, border))
+        .spawn((MainMenuPane, node, bg, border, frame))
         .with_children(|c| {
             c.spawn((
                 MainMenuTitle,
@@ -1610,6 +1714,62 @@ pub fn debug_panel_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn original_command_art_follows_pages_and_clears_before_submenus() {
+        assert_eq!(ROOT_LABEL_SPRITES.len(), ROOT_ENTRIES.len());
+        let mut app = root_menu_app(0);
+        app.add_systems(Update, sync_original_command_labels.after(update_main_menu));
+        app.update();
+        let selected = app
+            .world_mut()
+            .query::<&RetailMenuCursor>()
+            .iter(app.world())
+            .filter(|cursor| cursor.visible)
+            .count();
+        assert_eq!(selected, 1);
+        let mut stack = MenuStack::root();
+        stack.current_mut().unwrap().cursor = root_other_page_cursor(0);
+        app.insert_resource(InputMode::Menu(stack));
+        app.update();
+        let first = app
+            .world_mut()
+            .query::<(&MainMenuRow, &RetailMenuLabel)>()
+            .iter(app.world())
+            .find(|(row, _)| row.slot == 0)
+            .map(|(_, label)| *label)
+            .unwrap();
+        assert_eq!(
+            first,
+            RetailMenuLabel::new(
+                WINDOW_LABEL_GROUP,
+                ROOT_LABEL_SPRITES[ROOT_PAGE_1_LEN].unwrap()
+            )
+        );
+        let mut stack = MenuStack::root();
+        stack.push(MenuKind::Config);
+        app.insert_resource(InputMode::Menu(stack));
+        app.update();
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<Entity, (With<MainMenuRow>, With<RetailMenuLabel>)>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+        assert_eq!(
+            app.world_mut()
+                .query::<&RetailMenuCursor>()
+                .iter(app.world())
+                .count(),
+            0
+        );
+        assert!(app
+            .world_mut()
+            .query::<&Text>()
+            .iter(app.world())
+            .any(|text| !text.is_empty()));
+    }
 
     #[test]
     fn action_recast_remaining_gates_on_cooldown_abilities() {

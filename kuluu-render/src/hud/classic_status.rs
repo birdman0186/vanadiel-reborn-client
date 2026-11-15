@@ -61,6 +61,7 @@ pub(super) fn spawn_classic_frames(commands: &mut Commands) {
                     flex_direction: FlexDirection::Column,
                     ..default()
                 },
+                super::retail_frame::RetailWindow,
                 BackgroundColor(theme::FRAME_BG),
                 BorderColor::all(theme::FRAME_EDGE),
             ))

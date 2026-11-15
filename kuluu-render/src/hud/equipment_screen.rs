@@ -139,9 +139,9 @@ pub(crate) fn spawn_equipment_screen(mut commands: Commands, mut images: ResMut<
                 ..default()
             })
             .with_children(|col| {
-                let (mut n, bg, bd) = framed_box();
+                let (mut n, bg, bd, frame) = framed_box();
                 n.min_width = Val::Px(264.0);
-                col.spawn((n, bg, bd)).with_children(|p| {
+                col.spawn((n, bg, bd, frame)).with_children(|p| {
                     spawn_text(p, EquipRole::StatusName, 14.0, theme::TITLE);
                     spawn_text(p, EquipRole::StatusVitals, 13.0, theme::TEXT);
                     spawn_text(p, EquipRole::StatusILvl, 12.0, theme::MUTED);
@@ -151,8 +151,8 @@ pub(crate) fn spawn_equipment_screen(mut commands: Commands, mut images: ResMut<
                     spawn_text(p, EquipRole::StatusCombat, 13.0, theme::TEXT);
                 });
 
-                let (n, bg, bd) = framed_box();
-                col.spawn((n, bg, bd)).with_children(|p| {
+                let (n, bg, bd, frame) = framed_box();
+                col.spawn((n, bg, bd, frame)).with_children(|p| {
                     p.spawn(Node {
                         flex_direction: FlexDirection::Row,
                         align_items: AlignItems::Center,
@@ -184,8 +184,8 @@ pub(crate) fn spawn_equipment_screen(mut commands: Commands, mut images: ResMut<
             });
 
             // Center: title + 4x4 equipment-slot icon grid.
-            let (n, bg, bd) = framed_box();
-            root.spawn((n, bg, bd)).with_children(|p| {
+            let (n, bg, bd, frame) = framed_box();
+            root.spawn((n, bg, bd, frame)).with_children(|p| {
                 spawn_text(p, EquipRole::Header, 14.0, theme::TITLE);
                 p.spawn(Node {
                     flex_direction: FlexDirection::Column,
@@ -210,14 +210,15 @@ pub(crate) fn spawn_equipment_screen(mut commands: Commands, mut images: ResMut<
             });
 
             // Right: equippable-item storage list (only shown while picking).
-            let (mut n, bg, bd) = framed_box();
+            let (mut n, bg, bd, frame) = framed_box();
             n.width = Val::Px(204.0);
-            root.spawn((EquipStorageBox, n, bg, bd)).with_children(|p| {
-                spawn_text(p, EquipRole::StorageTitle, 13.0, theme::TITLE);
-                for i in 0..STORAGE_ROWS {
-                    spawn_row(p, EquipRole::StorageRow(i), 12.0, theme::TEXT);
-                }
-            });
+            root.spawn((EquipStorageBox, n, bg, bd, frame))
+                .with_children(|p| {
+                    spawn_text(p, EquipRole::StorageTitle, 13.0, theme::TITLE);
+                    for i in 0..STORAGE_ROWS {
+                        spawn_row(p, EquipRole::StorageRow(i), 12.0, theme::TEXT);
+                    }
+                });
         });
 }
 

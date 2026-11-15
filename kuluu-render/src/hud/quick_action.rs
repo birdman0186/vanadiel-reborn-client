@@ -67,6 +67,7 @@ pub fn spawn_quick_action(mut commands: Commands) {
                 ..default()
             },
             ZIndex(20),
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
         ))

@@ -67,7 +67,12 @@ pub fn text_font(size: f32) -> TextFont {
 
 /// A framed window panel: translucent navy fill, steel-blue 1px border,
 /// column layout. Every game window's outer chrome goes through this.
-pub fn window_frame() -> (Node, BackgroundColor, BorderColor) {
+pub fn window_frame() -> (
+    Node,
+    BackgroundColor,
+    BorderColor,
+    super::retail_frame::RetailWindow,
+) {
     (
         Node {
             padding: UiRect::axes(Val::Px(10.0), Val::Px(8.0)),
@@ -78,5 +83,6 @@ pub fn window_frame() -> (Node, BackgroundColor, BorderColor) {
         },
         BackgroundColor(theme::FRAME_BG),
         BorderColor::all(theme::FRAME_EDGE),
+        super::retail_frame::RetailWindow,
     )
 }

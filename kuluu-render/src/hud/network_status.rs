@@ -52,6 +52,7 @@ pub fn spawn_network_status(mut commands: Commands) {
                 column_gap: Val::Px(6.0),
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
             // Above the menu help bar so the panel frames over it, as retail does.

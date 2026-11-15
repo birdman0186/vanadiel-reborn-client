@@ -27,6 +27,7 @@ pub fn spawn_chat_input(mut commands: Commands) {
                 display: Display::None,
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
         ))

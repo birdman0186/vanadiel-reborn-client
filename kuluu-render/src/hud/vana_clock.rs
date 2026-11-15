@@ -42,6 +42,7 @@ pub fn spawn_vana_clock_as_child(p: &mut ChildSpawnerCommands) {
             border: UiRect::all(Val::Px(1.0)),
             ..default()
         },
+        super::retail_frame::RetailWindow,
         BackgroundColor(theme::FRAME_BG),
         BorderColor::all(theme::FRAME_EDGE),
     ))

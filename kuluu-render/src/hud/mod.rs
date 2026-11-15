@@ -37,6 +37,8 @@ pub mod network_status;
 pub mod overlay;
 pub mod panel_column;
 pub mod quick_action;
+pub mod retail_frame;
+pub mod retail_text;
 pub mod stair_debug;
 // (roster mockup deleted — real party/self HUD is party_frame.rs)
 pub mod party_frame;
@@ -269,6 +271,10 @@ impl Plugin for HudPlugin {
         app.init_resource::<vana_clock::VanaClockVisible>();
 
         app.init_resource::<menu::DynamicMenu>();
+        app.add_systems(
+            Update,
+            menu::sync_original_command_labels.after(menu::update_main_menu),
+        );
 
         app.init_resource::<overlay::ActiveOverlay>();
         app.init_resource::<chat_panel::ActiveChatTab>();

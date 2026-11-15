@@ -384,6 +384,7 @@ fn spawn_panel(parent: &mut ChildSpawnerCommands, kind: ChatKind, initial_displa
                 overflow: Overflow::clip(),
                 ..default()
             },
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
         ))

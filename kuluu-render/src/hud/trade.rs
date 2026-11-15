@@ -244,6 +244,7 @@ pub fn spawn_trade_window(mut commands: Commands) {
                 ..default()
             },
             ZIndex(25),
+            super::retail_frame::RetailWindow,
             BackgroundColor(theme::FRAME_BG),
             BorderColor::all(theme::FRAME_EDGE),
         ))

@@ -21,8 +21,7 @@ const RGBA_PIXEL_BYTES: usize = 4;
 #[test]
 #[ignore = "requires an installed client and GPU; writes production HUD captures"]
 fn quantity_overlay_production_capture() {
-    let root = ffxi_dat::install::named("retail").expect("registered retail install");
-    let dat = ffxi_dat::DatRoot::open(root).expect("retail DAT root");
+    let dat = Arc::new(ffxi_dat::DatRoot::from_env_or_default().expect("selected DAT install"));
     println!("capture DAT profile: {:?}", dat.profile());
     let output = std::env::var("KULUU_CAPTURE_DIR").expect("KULUU_CAPTURE_DIR");
     std::fs::create_dir_all(&output).unwrap();
@@ -37,8 +36,14 @@ fn quantity_overlay_production_capture() {
             .disable::<bevy::winit::WinitPlugin>()
             .disable::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>(),
     );
+    app.add_plugins((
+        crate::ui_element_atlas::UiElementAtlasPlugin,
+        super::retail_frame::RetailFramePlugin,
+    ));
     app.insert_resource(ClearColor(CAPTURE_BACKGROUND))
-        .insert_resource(item_dat_root::ItemDatRoot(Some(Arc::new(dat))))
+        .insert_resource(item_dat_root::ItemDatRoot(Some(dat.clone())))
+        .insert_resource(crate::ui_element_atlas::UiElementDatRoot(Some(dat)))
+        .init_resource::<crate::ui_font::UiFont>()
         .init_resource::<item_dat_root::ItemIconCache>()
         .init_resource::<SceneState>()
         .init_resource::<InputMode>()
@@ -52,6 +57,11 @@ fn quantity_overlay_production_capture() {
         .add_systems(
             PostUpdate,
             item_grid::sync_count_outlines.before(bevy::ui::UiSystems::Content),
+        )
+        .add_systems(Startup, crate::ui_font::load_ui_font)
+        .add_systems(
+            PostUpdate,
+            crate::ui_font::apply_ui_font.before(bevy::ui::UiSystems::Content),
         )
         .add_systems(
             Startup,

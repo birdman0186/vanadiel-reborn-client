@@ -1140,8 +1140,8 @@ pub fn spawn_auction_screen(mut commands: Commands, mut images: ResMut<Assets<Im
             })
             .with_children(|col| {
                 // Item list (catalog / sell / sales status).
-                let (n, bg, bd) = window_frame();
-                col.spawn((AhFrame(FrameId::List), n, bg, bd))
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((AhFrame(FrameId::List), n, bg, bd, frame))
                     .with_children(|p| {
                         spawn_text(p, Role::ListEmpty, 13.0, theme::TEXT);
                         for i in 0..CATALOG_ROWS {
@@ -1150,8 +1150,8 @@ pub fn spawn_auction_screen(mut commands: Commands, mut images: ResMut<Assets<Im
                     });
 
                 // Price-history table.
-                let (n, bg, bd) = window_frame();
-                col.spawn((AhFrame(FrameId::Hist), n, bg, bd))
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((AhFrame(FrameId::Hist), n, bg, bd, frame))
                     .with_children(|p| {
                         spawn_text(p, Role::HistTitle, 14.0, theme::TITLE);
                         p.spawn(Node {
@@ -1188,8 +1188,8 @@ pub fn spawn_auction_screen(mut commands: Commands, mut images: ResMut<Assets<Im
                     });
 
                 // Item detail card.
-                let (n, bg, bd) = window_frame();
-                col.spawn((AhFrame(FrameId::Detail), n, bg, bd))
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((AhFrame(FrameId::Detail), n, bg, bd, frame))
                     .with_children(|p| {
                         p.spawn(Node {
                             flex_direction: FlexDirection::Row,
@@ -1222,13 +1222,13 @@ pub fn spawn_auction_screen(mut commands: Commands, mut images: ResMut<Assets<Im
                     ..default()
                 })
                 .with_children(|bar| {
-                    let (n, bg, bd) = window_frame();
-                    bar.spawn((AhFrame(FrameId::GilBox), n, bg, bd))
+                    let (n, bg, bd, frame) = window_frame();
+                    bar.spawn((AhFrame(FrameId::GilBox), n, bg, bd, frame))
                         .with_children(|p| {
                             spawn_text(p, Role::GilLine, 13.0, theme::TEXT);
                         });
-                    let (n, bg, bd) = window_frame();
-                    bar.spawn((AhFrame(FrameId::SpinnerBox), n, bg, bd))
+                    let (n, bg, bd, frame) = window_frame();
+                    bar.spawn((AhFrame(FrameId::SpinnerBox), n, bg, bd, frame))
                         .with_children(|p| {
                             digit_spinner::spawn_row(p, digit_spinner::slots_without_cap(), |s| {
                                 AhText(Role::Spinner(s))
@@ -1244,12 +1244,12 @@ pub fn spawn_auction_screen(mut commands: Commands, mut images: ResMut<Assets<Im
             });
 
             // Right dock.
-            let (mut n, bg, bd) = window_frame();
+            let (mut n, bg, bd, frame) = window_frame();
             n.position_type = PositionType::Absolute;
             n.top = Val::Px(0.0);
             n.right = Val::Px(0.0);
             n.width = Val::Px(DOCK_W);
-            root.spawn((AhFrame(FrameId::Dock), n, bg, bd))
+            root.spawn((AhFrame(FrameId::Dock), n, bg, bd, frame))
                 .with_children(|p| {
                     spawn_text(p, Role::DockTitle, 14.0, theme::TITLE);
                     for i in 0..MAX_DOCK_ROWS {
@@ -1270,12 +1270,12 @@ pub fn spawn_auction_screen(mut commands: Commands, mut images: ResMut<Assets<Im
                 });
 
             // Yes/No confirm (lower-left, retail's fee/placement dialogs).
-            let (mut n, bg, bd) = window_frame();
+            let (mut n, bg, bd, frame) = window_frame();
             n.position_type = PositionType::Absolute;
             n.bottom = Val::Px(40.0);
             n.left = Val::Px(0.0);
             n.min_width = Val::Px(280.0);
-            root.spawn((AhFrame(FrameId::Confirm), n, bg, bd))
+            root.spawn((AhFrame(FrameId::Confirm), n, bg, bd, frame))
                 .with_children(|p| {
                     spawn_text(p, Role::ConfirmText, 14.0, theme::TEXT);
                     for (slot, choice) in [YesNo::Yes, YesNo::No].into_iter().enumerate() {

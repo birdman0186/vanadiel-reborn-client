@@ -535,16 +535,16 @@ pub(crate) fn spawn_delivery_screen(mut commands: Commands, mut images: ResMut<A
             })
             .with_children(|col| {
                 // Recipient field (outgoing only).
-                let (n, bg, bd) = window_frame();
-                col.spawn((DeliveryFrame(FrameId::RecipientBox), n, bg, bd))
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((DeliveryFrame(FrameId::RecipientBox), n, bg, bd, frame))
                     .with_children(|p| {
                         spawn_text(p, Role::RecipientLabel, 13.0, theme::TITLE);
                         spawn_text(p, Role::RecipientValue, 14.0, theme::TEXT);
                     });
 
                 // Grid box: header + 4x2 cells.
-                let (n, bg, bd) = window_frame();
-                col.spawn((n, bg, bd)).with_children(|p| {
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((n, bg, bd, frame)).with_children(|p| {
                     spawn_text(p, Role::GridHeader, 14.0, theme::TITLE);
                     p.spawn(Node {
                         flex_direction: FlexDirection::Column,
@@ -579,13 +579,13 @@ pub(crate) fn spawn_delivery_screen(mut commands: Commands, mut images: ResMut<A
                 spawn_row_hidden(col, Role::SenderLine, 13.0, theme::TEXT);
 
                 // Current Gil line + spinner line.
-                let (n, bg, bd) = window_frame();
-                col.spawn((n, bg, bd)).with_children(|p| {
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((n, bg, bd, frame)).with_children(|p| {
                     spawn_text(p, Role::GilLine, 13.0, theme::TEXT);
                 });
-                let (mut n, bg, bd) = window_frame();
+                let (mut n, bg, bd, frame) = window_frame();
                 n.display = Display::None;
-                col.spawn((DeliveryFrame(FrameId::SpinnerBox), n, bg, bd))
+                col.spawn((DeliveryFrame(FrameId::SpinnerBox), n, bg, bd, frame))
                     .with_children(|p| {
                         digit_spinner::spawn_row(p, digit_spinner::slots(), |s| {
                             DeliveryText(Role::Spinner(s))
@@ -616,8 +616,8 @@ pub(crate) fn spawn_delivery_screen(mut commands: Commands, mut images: ResMut<A
                 ..default()
             })
             .with_children(|col| {
-                let (n, bg, bd) = window_frame();
-                col.spawn((DeliveryFrame(FrameId::InvBox), n, bg, bd))
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((DeliveryFrame(FrameId::InvBox), n, bg, bd, frame))
                     .with_children(|p| {
                         spawn_text(p, Role::InvHeader, 13.0, theme::TITLE);
                         for i in 0..LIST_ROWS {
@@ -625,8 +625,8 @@ pub(crate) fn spawn_delivery_screen(mut commands: Commands, mut images: ResMut<A
                         }
                     });
 
-                let (n, bg, bd) = window_frame();
-                col.spawn((DeliveryFrame(FrameId::DetailBox), n, bg, bd))
+                let (n, bg, bd, frame) = window_frame();
+                col.spawn((DeliveryFrame(FrameId::DetailBox), n, bg, bd, frame))
                     .with_children(|p| {
                         p.spawn(Node {
                             flex_direction: FlexDirection::Row,

@@ -377,45 +377,46 @@ pub(crate) fn spawn_item_screen(mut commands: Commands, mut images: ResMut<Asset
 /// Spawned inside the bottom-left stack's compass column so the card sits
 /// where retail docks it: above the chat log, in the compass/clock slot.
 pub fn spawn_item_detail_card_as_child(col: &mut ChildSpawnerCommands, placeholder: Handle<Image>) {
-    let (mut n, bg, bd) = framed_box();
+    let (mut n, bg, bd, frame) = framed_box();
     n.width = Val::Px(DETAIL_WIDTH_PX);
     n.display = Display::None;
-    col.spawn((ItemDetailCard, n, bg, bd)).with_children(|p| {
-        p.spawn(Node {
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::FlexStart,
-            column_gap: Val::Px(6.0),
-            ..default()
-        })
-        .with_children(|h| {
-            h.spawn((
-                ItemIcon(IconSlot::Detail),
-                Node {
-                    width: Val::Px(DETAIL_ICON_PX),
-                    height: Val::Px(DETAIL_ICON_PX),
-                    flex_shrink: 0.0,
-                    display: Display::None,
-                    ..default()
-                },
-                ImageNode::new(placeholder),
-            ));
-            h.spawn(Node {
-                flex_direction: FlexDirection::Column,
+    col.spawn((ItemDetailCard, n, bg, bd, frame))
+        .with_children(|p| {
+            p.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::FlexStart,
+                column_gap: Val::Px(6.0),
                 ..default()
             })
-            .with_children(|c| {
-                c.spawn((
-                    ItemText(ItemRole::DetailName),
-                    Text::new(""),
-                    text_font(14.0),
-                    TextColor(theme::TITLE),
+            .with_children(|h| {
+                h.spawn((
+                    ItemIcon(IconSlot::Detail),
+                    Node {
+                        width: Val::Px(DETAIL_ICON_PX),
+                        height: Val::Px(DETAIL_ICON_PX),
+                        flex_shrink: 0.0,
+                        display: Display::None,
+                        ..default()
+                    },
+                    ImageNode::new(placeholder),
                 ));
-                for i in 0..DETAIL_ROWS {
-                    spawn_row(c, ItemRole::DetailRow(i), 12.0, theme::TEXT);
-                }
+                h.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                })
+                .with_children(|c| {
+                    c.spawn((
+                        ItemText(ItemRole::DetailName),
+                        Text::new(""),
+                        text_font(14.0),
+                        TextColor(theme::TITLE),
+                    ));
+                    for i in 0..DETAIL_ROWS {
+                        spawn_row(c, ItemRole::DetailRow(i), 12.0, theme::TEXT);
+                    }
+                });
             });
         });
-    });
 }
 
 fn spawn_bag_tabs(col: &mut ChildSpawnerCommands) {
@@ -460,11 +461,11 @@ fn spawn_bag_tabs(col: &mut ChildSpawnerCommands) {
 /// The list box; retail overlays each row's stack count on the icon's top-left
 /// corner rather than suffixing the name, so the count is a child of the icon.
 fn spawn_list_box(col: &mut ChildSpawnerCommands, placeholder: Handle<Image>) {
-    let (mut n, bg, bd) = framed_box();
+    let (mut n, bg, bd, frame) = framed_box();
     n.width = Val::Px(LIST_WIDTH_PX);
     n.flex_direction = FlexDirection::Row;
     n.column_gap = Val::Px(4.0);
-    col.spawn((n, bg, bd)).with_children(|p| {
+    col.spawn((n, bg, bd, frame)).with_children(|p| {
         p.spawn(Node {
             flex_direction: FlexDirection::Column,
             flex_grow: 1.0,
@@ -526,9 +527,9 @@ fn spawn_list_box(col: &mut ChildSpawnerCommands, placeholder: Handle<Image>) {
 }
 
 fn spawn_options_box(root: &mut ChildSpawnerCommands) {
-    let (mut n, bg, bd) = framed_box();
+    let (mut n, bg, bd, frame) = framed_box();
     n.width = Val::Px(OPTIONS_WIDTH_PX);
-    root.spawn((n, bg, bd)).with_children(|p| {
+    root.spawn((n, bg, bd, frame)).with_children(|p| {
         spawn_text(p, ItemRole::OptionsTitle, 13.0, theme::TITLE);
         spawn_text(p, ItemRole::OptionsSortLabel, 12.0, theme::MUTED);
         for i in 0..SORT_OPTIONS.len() {

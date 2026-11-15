@@ -123,9 +123,9 @@ pub(crate) fn spawn_check_view(mut commands: Commands, mut images: ResMut<Assets
         ))
         .with_children(|root| {
             // The window itself: the 4x4 slot grid over the View Wares entry.
-            let (mut n, bg, bd) = framed_box();
+            let (mut n, bg, bd, frame) = framed_box();
             n.width = Val::Px(GRID_COL_PX);
-            root.spawn((n, bg, bd)).with_children(|p| {
+            root.spawn((n, bg, bd, frame)).with_children(|p| {
                 p.spawn(Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(4.0),
@@ -177,9 +177,9 @@ pub(crate) fn spawn_check_view(mut commands: Commands, mut images: ResMut<Assets
             // Under the window: the focused slot's item card. The target's
             // linkshell and bazaar message ride here too — 0x0C9/0x0CA carry
             // them and retail's window has no pane of its own for either.
-            let (mut n, bg, bd) = framed_box();
+            let (mut n, bg, bd, frame) = framed_box();
             n.width = Val::Px(CARD_PX);
-            root.spawn((n, bg, bd)).with_children(|p| {
+            root.spawn((n, bg, bd, frame)).with_children(|p| {
                 spawn_text(p, CheckRole::Linkshell, 13.0, theme::TEXT);
                 spawn_text(p, CheckRole::Message, 13.0, theme::MUTED);
                 p.spawn(Node {

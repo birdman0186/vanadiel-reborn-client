@@ -97,6 +97,7 @@ pub fn spawn_target_action_menu_as_child(p: &mut ChildSpawnerCommands) {
             ..default()
         },
         ZIndex(20),
+        super::retail_frame::RetailWindow,
         BackgroundColor(theme::FRAME_BG),
         BorderColor::all(theme::FRAME_EDGE),
     ))
