@@ -16,7 +16,7 @@ pub const TEXTURE_KIND: u8 = 0x20;
 /// [`crate::client_profile::KNOWN_CLIENTS`] rows.
 pub const UI_SHEET_FILE_ID: u32 = 39542;
 
-const NAME_LEN: usize = 0x10;
+pub(super) const NAME_LEN: usize = 0x10;
 
 // Packed QuadData layout (research/XIClient/src/XIClient/include/UI/MenuShapeFormat.h).
 mod comp {
@@ -91,15 +91,15 @@ pub struct UiSprite {
     pub rgba: Vec<u8>,
 }
 
-fn read_u16(b: &[u8], o: usize) -> Option<u16> {
+pub(super) fn read_u16(b: &[u8], o: usize) -> Option<u16> {
     Some(u16::from_le_bytes(b.get(o..o + 2)?.try_into().ok()?))
 }
 
-fn read_i16(b: &[u8], o: usize) -> Option<i16> {
+pub(super) fn read_i16(b: &[u8], o: usize) -> Option<i16> {
     Some(i16::from_le_bytes(b.get(o..o + 2)?.try_into().ok()?))
 }
 
-fn normalize_name(raw: &[u8]) -> String {
+pub(super) fn normalize_name(raw: &[u8]) -> String {
     let s: String = raw
         .iter()
         .map(|&b| {
@@ -258,38 +258,39 @@ pub fn ui_component_sprite(
 }
 
 #[cfg(test)]
+/// Read the bare install file rather than resolving through overlays: the
+/// xiview Pivot overlay ships an hxi-era sheet, which would mask the
+/// install's own.
+pub(super) fn read_icon_sheet_unoverlaid(root: &crate::archive::DatRoot) -> Option<Vec<u8>> {
+    let path = match root.resolve(UI_SHEET_FILE_ID) {
+        Ok(loc) => loc.join_under(root.root()),
+        Err(e) => {
+            eprintln!(
+                "SKIP (real-DAT guard): {} does not place file id {UI_SHEET_FILE_ID}: {e}",
+                root.root().display()
+            );
+            return None;
+        }
+    };
+    match std::fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(e) => {
+            eprintln!(
+                "SKIP (real-DAT guard): {} is unreadable: {e}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::texture::TexFormat;
 
     const FRAMES_JP: &str = "menu    frames  ";
     const FRAMES_US: &str = "menu    framesus";
-
-    /// Read the bare install file rather than resolving through overlays: the
-    /// xiview Pivot overlay ships an hxi-era sheet, which would mask the
-    /// install's own.
-    fn read_icon_sheet_unoverlaid(root: &crate::archive::DatRoot) -> Option<Vec<u8>> {
-        let path = match root.resolve(UI_SHEET_FILE_ID) {
-            Ok(loc) => loc.join_under(root.root()),
-            Err(e) => {
-                eprintln!(
-                    "SKIP (real-DAT guard): {} does not place file id {UI_SHEET_FILE_ID}: {e}",
-                    root.root().display()
-                );
-                return None;
-            }
-        };
-        match std::fs::read(&path) {
-            Ok(bytes) => Some(bytes),
-            Err(e) => {
-                eprintln!(
-                    "SKIP (real-DAT guard): {} is unreadable: {e}",
-                    path.display()
-                );
-                None
-            }
-        }
-    }
 
     fn name16(s: &str) -> [u8; 16] {
         let mut out = [b' '; 16];
