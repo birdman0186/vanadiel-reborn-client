@@ -22,7 +22,7 @@ use kuluu_render::hud::retail_text::{RetailMenuCursor, RetailMenuLabel, WINDOW_L
 use kuluu_render::input_mode::{InputMode, MenuStack};
 use kuluu_render::ui_font::{apply_ui_font, load_ui_font, UiFont};
 use kuluu_render::{nameplate_color::NameColorTable, scene::Target, snapshot::SceneState};
-use kuluu_snapshot::{PartyMember, SceneSnapshot};
+use kuluu_snapshot::{NetStats, PartyMember, SceneSnapshot};
 
 const PIXEL_CHANNELS: usize = 4;
 const WIDTH: u32 = 1280;
@@ -153,6 +153,12 @@ fn fixture(party: bool) -> SceneSnapshot {
         self_char_id: Some(1),
         char_name: Some("Trivius".into()),
         zone_id: Some(TEST_ZONE),
+        net_stats: NetStats {
+            send_bps: 309,
+            recv_bps: 196,
+            send_health: 100,
+            recv_health: 100,
+        },
         stage: kuluu_snapshot::Stage::InZone,
         ..default()
     };
@@ -383,6 +389,16 @@ struct CommandArt<'w, 's> {
     >,
     panes: Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform), With<MainMenuPane>>,
     images: Query<'w, 's, (&'static ComputedNode, &'static UiGlobalTransform), With<ImageNode>>,
+    network_art: Query<
+        'w,
+        's,
+        (
+            &'static network_status::NetworkSprite,
+            &'static Node,
+            &'static ComputedNode,
+            &'static UiGlobalTransform,
+        ),
+    >,
     network: Query<
         'w,
         's,
@@ -404,6 +420,11 @@ impl CommandArt<'_, '_> {
         let (network, transform) = self.network.single().expect("one network indicator");
         let network = Rect::from_center_size(transform.affine().translation, network.size());
         assert_pixel_position(
+            Vec2::new(network.min.y, network.height()),
+            Vec2::new(16.0, 30.0) * scale,
+            "authored network height and top",
+        );
+        assert_pixel_position(
             Vec2::new(network.min.x, network.max.x),
             Vec2::new(pane.min.x, pane.max.x),
             "network and Commands horizontal alignment",
@@ -412,6 +433,32 @@ impl CommandArt<'_, '_> {
             network.max.y <= pane.min.y,
             "network covers the Commands title"
         );
+
+        let mut glyphs_per_line = [0; 3];
+        for (sprite, node, computed, transform) in &self.network_art {
+            let network_status::NetworkSprite::Character { line, .. } = *sprite else {
+                continue;
+            };
+            if node.display == Display::None {
+                continue;
+            }
+            let rect = Rect::from_center_size(transform.affine().translation, computed.size());
+            let start = (rect.min - network.min) / scale;
+            let end = (rect.max - network.min) / scale;
+            // The title ends at y=6. S and R occupy separate rows on its right side.
+            let inside = match line {
+                0 => end.x <= 58.0 && start.y >= 6.0,
+                1 => start.x >= 58.0 && start.y >= 6.0 && end.y <= 18.0,
+                2 => start.x >= 58.0 && start.y >= 18.0,
+                _ => false,
+            };
+            assert!(
+                inside && end.y <= 30.0 && end.x <= 112.0,
+                "network glyph overlaps or leaves its row: {start:?}..{end:?}"
+            );
+            glyphs_per_line[line] += 1;
+        }
+        assert_eq!(glyphs_per_line, [4, 4, 4], "expected 100%, S 309 and R 196");
 
         let mut row_bounds = Vec::new();
         for (row, node, computed, transform, label, cursor, color) in &self.rows {
