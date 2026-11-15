@@ -295,6 +295,8 @@ The slot frame index is 40 plus the row times four plus the column.
 The item name, worn slot and available equipment come from the session.
 Without an icon table, the cell displays the slot abbreviation.
 The Commands and Party headings have extra clearance for the new typeface.
+The Cobalt Party window adds 20 pixels to the original button and frame widths so
+the new cursor and the longest Party labels fit together. Row order and spacing follow the DAT.
 
 | Commands selection | Game connection in this pass |
 | --- | --- |

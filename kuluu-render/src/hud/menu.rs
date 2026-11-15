@@ -1582,6 +1582,13 @@ pub fn update_main_menu(
     } else {
         0.0
     };
+    // The retail Party buttons have baked captions. Reserve room for the
+    // text caption and separate selection cursor when drawing the Cobalt skin.
+    let party_caption_space = if astral.is_some() && top_kind == MenuKind::Party {
+        20.0
+    } else {
+        0.0
+    };
     let fallback_right = if astral.is_some() {
         style::PANEL_COLUMN_RIGHT_PX
     } else {
@@ -1601,7 +1608,7 @@ pub fn update_main_menu(
     for mut pane in &mut pane_q {
         let (width, height, padding, border, gap) = if let Some(page) = page {
             (
-                Val::Px(f32::from(page.root.width)),
+                Val::Px(f32::from(page.root.width) + party_caption_space),
                 Val::Px(f32::from(page.root.height) + heading_inset),
                 UiRect::ZERO,
                 UiRect::ZERO,
@@ -1698,7 +1705,7 @@ pub fn update_main_menu(
         if record.is_some() || used_layout {
             let (width, height) = record.map_or((Val::Auto, Val::Auto), |row| {
                 (
-                    Val::Px(f32::from(row.width)),
+                    Val::Px(f32::from(row.width) + party_caption_space),
                     Val::Px(f32::from(row.height)),
                 )
             });
