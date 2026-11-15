@@ -79,6 +79,20 @@ Keep graphics enhancements optional and scalable through presets.
 Ray tracing and animated vegetation are outside scope.
 Keep Rust, Bevy, and wgpu as the foundation.
 
+### Proposed first graphics trial
+
+Use Bastok Markets as the first comparison zone. Record the same walk from the fountain to the auction counters in daylight and at night. Keep the camera position, output resolution, frame cap, and game time the same between each pair of captures. Record zoning separately from steady movement. Use a repeatable combat sequence outside the city to check effect visibility and animation timing.
+
+| Pass | Proposed change | Check in game |
+| --- | --- | --- |
+| Stone and metal | Test albedo, normal, roughness, and metalness on one stone stair and one metal fitting. Use the existing zone material shader and texture mipmaps. | Stone keeps its relief in oblique light. Metal responds to the lamp. Insignias remain readable. |
+| Lighting and effects | Tune the existing lighting, directional shadows, lamp range, and bloom around this scene. | Check railings, shadows, and sign brightness at noon and at night. Keep combat cues and menu text legible. |
+| Geometry and texture detail | Try one higher-detail railing and one static tree with distance-based detail. Enable higher-resolution textures selectively. | Check silhouettes and texture shimmer while moving. Walk the original routes and verify targeting and collision. |
+
+Use the existing Minimum through Maximum presets. Start with original assets on Minimum and Low. Measure each additional effect before assigning it to higher presets. Expose accepted settings in both graphics menus. Keep the original asset as the fallback when an enhancement is missing.
+
+For each trial, record the GPU, output and internal resolutions, warm frame-time median, 95th and 99th percentiles, and the proportion of frames above 16.67 ms. Record texture memory and zone-loading delays separately. Start with the owner's RTX 4090 and add a lower-spec machine before claiming a supported hardware range. The menu capture test does not measure these costs.
+
 ## November server compatibility
 
 The recorded server revision is `7a91059f856933fcec58f2287e22c6ef6148935c`.
