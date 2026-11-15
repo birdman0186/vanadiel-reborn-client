@@ -214,6 +214,10 @@ impl<S: SceneSource + Resource + Component<Mutability = bevy::ecs::component::Mu
         app.add_plugins(minimap::MinimapPlugin);
 
         app.add_plugins(ui_element_atlas::UiElementAtlasPlugin);
+        app.add_plugins((
+            hud::retail_frame::RetailFramePlugin,
+            hud::retail_text::RetailMenuLabelsPlugin,
+        ));
 
         #[cfg(not(target_arch = "wasm32"))]
         app.add_plugins(graphics::render_scale::RenderScalePlugin);
