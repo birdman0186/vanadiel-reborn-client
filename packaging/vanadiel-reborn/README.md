@@ -237,3 +237,32 @@ This command does not change the saved execution policy.
 The collector checks passed with synthetic files on PowerShell 7 for Linux.
 They check archive contents, hashes, source preservation, output boundaries, and missing required files.
 Windows PowerShell execution remains unverified.
+
+## Original Commands layout
+
+Open the Commands menu with the minus key on the numeric keypad.
+Use Left or Right to change pages. Use Up or Down to select a row.
+Press Enter to open the selected command. The controller D-pad follows the same row and page order.
+For client graphics settings, open page two, select Config, then select Graphics.
+
+Both English pages read their pane dimensions, row positions, and decoration from the installed FFXI menu files.
+The supplied game files give a 112 × 202 pane with twelve 88 × 16 buttons per page.
+Gauges, chat, and other screens have separate renderers.
+Some menu entries still report that their action is unavailable.
+
+The client derives the selected button tint from the supplied menu reference.
+The exact retail tint animation and the display scale on the owner's Windows installation still require comparison.
+The Commands and Network panes use a common right inset when the status display fits below them.
+With insufficient vertical room, the client clears space for the party display.
+
+For a local Windows check, extract the ZIP into a new folder. Open that folder.
+Double-click `kuluu.exe`. Select your existing server profile and sign in with your usual character.
+If the launcher asks for game files, close it and open PowerShell in the new folder.
+For the installation used during this project, run the following commands.
+
+```powershell
+$env:FFXI_DAT_PATH = 'E:\Final Fantasy XI\SquareEnix\FINAL FANTASY XI'
+.\kuluu.exe
+```
+
+To compare builds, log out and launch the previous client from its original folder.
